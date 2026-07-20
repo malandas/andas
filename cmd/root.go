@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "0.9.0"
+const version = "1.0.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -41,6 +41,7 @@ usage:
   andas scan . --history      also scan git history for removed secrets
   andas scan . --html r.html  write a shareable HTML report
   andas scan . --sarif r.sarif write SARIF for CI / code scanning
+  andas scan . --markdown r.md write a PR-comment-style Markdown report
   andas hook install          install a git pre-commit secret guard
   andas hook uninstall        remove the pre-commit guard
   andas version               print version

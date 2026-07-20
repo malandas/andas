@@ -1,5 +1,8 @@
 # andas
 
+[![ci](https://github.com/malandas/andas/actions/workflows/ci.yml/badge.svg)](https://github.com/malandas/andas/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/malandas/andas)](https://github.com/malandas/andas/releases/latest)
+[![license](https://img.shields.io/github/license/malandas/andas)](LICENSE)
 
 Most security scanners bury you in alerts. `andas` answers the question they
 don't: **is this risk actually real for *your* project, or is it noise?**
@@ -223,9 +226,12 @@ go vet ./...          # static checks
 
 The suite covers the security-critical logic directly: the real-risk decision
 table, entropy precision (it must catch real secrets and reject placeholders),
-the npm/Yarn (v1 + Berry) lockfile parser, the reachability BFS, and the
-baseline round-trip (which must never persist raw secret material). Network
-validation, git plumbing, and file walking are covered by integration runs.
+the npm/Yarn (v1 + Berry) lockfile parser, the reachability BFS, the blast-radius
+scope parsers, the baseline round-trip (which must never persist raw secret
+material), plus end-to-end tests of the CLI wiring and the git-history scanner.
+CI runs `vet` + `test` and has andas scan its own source on every push.
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 

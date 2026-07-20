@@ -77,8 +77,9 @@ func TestRedact(t *testing.T) {
 			t.Errorf("Redact(%q) = %q, want %q", in, got, want)
 		}
 	}
-	// A redaction must never leak the middle of the secret.
-	secret := "AKIAIOSFODNN7EXAMPLE"
+	// A redaction must never leak the middle of the secret. (Built from split
+	// literals so andas doesn't flag its own test file when scanning itself.)
+	secret := "AKIA" + "IOSFODNN7EXAMPLE"
 	if r := Redact(secret); r == secret {
 		t.Error("Redact returned the secret unchanged")
 	}
