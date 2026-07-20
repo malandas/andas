@@ -76,6 +76,7 @@ or a `#` comment. Matching files are skipped by the working-tree scanners.
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--history` | off | Also scan the full git history for secrets removed from HEAD. |
+| `--licenses` | off | Flag dependency licenses with legal obligations (needs installed deps). |
 | `--baseline <path>` | — | Suppress findings recorded in this baseline file. |
 | `--update-baseline` | off | Accept all current findings into `--baseline`, then exit. |
 | `--no-entropy` | off | Disable entropy-based detection of unknown/custom secrets. |
@@ -268,6 +269,16 @@ raises a finding's confidence, never lowers it.
 - Every finding carries a concrete **fix** line (rotation link, upgrade target).
 
 A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
+
+## License compliance
+
+`andas scan . --licenses` reads the licenses of your **installed** dependencies
+(`node_modules` for npm, `*.dist-info` for Python) and flags the ones with legal
+obligations — **strong copyleft** (GPL/AGPL) and **missing/unknown** licenses.
+It auto-detects whether your project is proprietary (a `private` or `UNLICENSED`
+package.json) or open-source and scores accordingly: an AGPL dependency is a
+`HIGH` obligation for a closed product but merely informational for an OSS one.
+Permissive licenses (MIT, BSD, Apache) are treated as noise.
 
 ## SBOM (Software Bill of Materials)
 

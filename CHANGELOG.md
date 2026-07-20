@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.11.0
+- License compliance (`--licenses`): reads installed dependency licenses
+  (node_modules, *.dist-info) and flags strong copyleft (GPL/AGPL) and
+  missing/unknown licenses. Auto-detects proprietary vs OSS projects and scores
+  copyleft accordingly; permissive licenses are treated as noise.
+
 ## v1.10.0
 - SBOM generation: `andas scan . --sbom bom.json` writes a CycloneDX 1.5
   Software Bill of Materials of every resolved dependency across all six

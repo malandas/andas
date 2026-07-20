@@ -18,6 +18,7 @@ import (
 	"github.com/malandas/andas/internal/scanner/deps"
 	"github.com/malandas/andas/internal/scanner/githistory"
 	"github.com/malandas/andas/internal/scanner/iac"
+	"github.com/malandas/andas/internal/scanner/licenses"
 	"github.com/malandas/andas/internal/scanner/sast"
 	"github.com/malandas/andas/internal/scanner/secrets"
 )
@@ -29,6 +30,7 @@ func runScan(args []string) int {
 		noValidate = fs.Bool("no-validate", false, "skip live validation of secrets")
 		offline    = fs.Bool("offline", false, "make no network calls at all (no secret validation, no OSV vuln lookup)")
 		history    = fs.Bool("history", false, "also scan the full git history for secrets removed from HEAD")
+		licScan    = fs.Bool("licenses", false, "also flag dependency licenses with legal obligations (needs installed deps)")
 		noEntropy  = fs.Bool("no-entropy", false, "disable entropy-based detection of unknown/custom secrets")
 		baseline   = fs.String("baseline", "", "suppress findings listed in this baseline file")
 		updateBase = fs.Bool("update-baseline", false, "write all current findings to --baseline as accepted, then exit")
@@ -96,6 +98,9 @@ func runScan(args []string) int {
 	}
 	if *history {
 		scanners = append(scanners, githistory.New())
+	}
+	if *licScan {
+		scanners = append(scanners, licenses.New())
 	}
 
 	// Scanners run concurrently — each walks the tree independently, so on a big
