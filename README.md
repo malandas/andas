@@ -15,9 +15,19 @@ One command. One dependency-free binary. Linux, macOS, Windows.
 
 ## Install
 
-Download the binary for your OS from `dist/`, or build from source:
+Grab a prebuilt binary from the [latest release](https://github.com/malandas/andas/releases/latest):
 
 ```sh
+# macOS (Apple Silicon) example
+curl -sSL -o andas https://github.com/malandas/andas/releases/latest/download/andas-darwin-arm64
+chmod +x andas && ./andas version
+```
+
+With a Go toolchain:
+
+```sh
+go install github.com/malandas/andas@latest
+# or from a clone:
 go build -o andas .
 ```
 
@@ -181,3 +191,7 @@ and a unit-test suite over the core logic:
 | **git-history** | secrets removed from HEAD | still-in-history **and** still-live |
 
 Outputs: terminal, JSON, HTML, SARIF — each with remediation.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
