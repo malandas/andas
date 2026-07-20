@@ -21,12 +21,65 @@ func New() *Scanner { return &Scanner{} }
 func (s *Scanner) Name() string { return "deps" }
 
 func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, error) {
-	pkgJSONPath := findPackageJSON(root)
-	if pkgJSONPath == "" {
-		return nil, nil // not a JS/TS project; nothing to do
+	if opts.Offline {
+		if hasAnyManifest(root) {
+			fmt.Fprintln(os.Stderr, "andas: offline mode — skipping OSV vulnerability lookup")
+		}
+		return nil, nil
 	}
-	projDir := filepath.Dir(pkgJSONPath)
 
+	var out []finding.Finding
+
+	// JavaScript/TypeScript gets the rich path: reachability + used-symbol
+	// evidence. Every other ecosystem gets vulnerability findings ranked by
+	// real severity (reachability not yet analysed for those languages).
+	if pkgJSONPath := findPackageJSON(root); pkgJSONPath != "" {
+		npm, err := scanNpm(root, pkgJSONPath, opts)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, npm...)
+	}
+	for _, eco := range ecosystems {
+		manifest := findManifest(root, eco.manifest)
+		if manifest == "" {
+			continue
+		}
+		refs := eco.parse(manifest)
+		if len(refs) == 0 {
+			continue
+		}
+		advisories, err := queryOSV(refs, opts.TimeoutS)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "andas: OSV lookup for %s failed (%v); skipping\n", eco.name, err)
+			continue
+		}
+		versionOf := map[string]string{}
+		for _, r := range refs {
+			versionOf[r.Name] = r.Version
+		}
+		for name, advs := range advisories {
+			for _, a := range advs {
+				out = append(out, finding.Finding{
+					Kind:     finding.KindVuln,
+					RuleID:   a.ID,
+					Title:    vulnTitle(name, a),
+					File:     manifest,
+					Match:    fmt.Sprintf("%s@%s", name, versionOf[name]),
+					Severity: a.Severity,
+					Fix:      fmt.Sprintf("Upgrade %s past %s to a patched release; see https://osv.dev/vulnerability/%s", name, versionOf[name], a.ID),
+					Context:  finding.Context{Note: eco.name + " dependency — reachability analysis not yet available for this ecosystem"},
+				})
+			}
+		}
+	}
+	return out, nil
+}
+
+// scanNpm runs the JS/TS path: resolve the graph, compute reachability and used
+// symbols, and build findings ranked by whether your code actually reaches them.
+func scanNpm(root, pkgJSONPath string, opts scanner.Options) ([]finding.Finding, error) {
+	projDir := filepath.Dir(pkgJSONPath)
 	g, lockKind, err := loadGraph(pkgJSONPath, projDir)
 	if err != nil {
 		return nil, err
@@ -38,27 +91,22 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		return nil, nil
 	}
 
-	// Reachability is local and always runs — it's the context that matters
-	// even when we can reuse cached vuln data later.
 	imports, err := importedPackages(root, opts.IgnorePaths)
 	if err != nil {
 		return nil, err
 	}
 	reached := reachableSet(g, imports)
 
-	if opts.Offline {
-		fmt.Fprintln(os.Stderr, "andas: offline mode — skipping OSV vulnerability lookup")
-		return nil, nil
+	refs := make([]pkgRef, 0, len(g.byName))
+	for name, p := range g.byName {
+		refs = append(refs, pkgRef{Name: name, Version: p.Version, Ecosystem: "npm"})
 	}
-
-	advisories, err := queryOSV(g, opts.TimeoutS)
+	advisories, err := queryOSV(refs, opts.TimeoutS)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "andas: OSV lookup failed (%v); skipping dependency scan\n", err)
+		fmt.Fprintf(os.Stderr, "andas: OSV lookup failed (%v); skipping npm scan\n", err)
 		return nil, nil
 	}
 
-	// For the vulnerable *reachable* packages, gather which of their exports the
-	// app actually uses — evidence for triage attached to each finding.
 	wanted := map[string]bool{}
 	for name := range advisories {
 		if reached[name] {
@@ -75,9 +123,8 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		p := g.byName[name]
 		isReachable := reached[name]
 		for _, a := range advs {
-			note := reachabilityNote(p, isReachable)
 			reach := isReachable
-			f := finding.Finding{
+			out = append(out, finding.Finding{
 				Kind:     finding.KindVuln,
 				RuleID:   a.ID,
 				Title:    vulnTitle(name, a),
@@ -87,14 +134,27 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				Fix:      fmt.Sprintf("Upgrade %s past %s to a patched release; see https://osv.dev/vulnerability/%s", name, p.Version, a.ID),
 				Context: finding.Context{
 					Reachable: &reach,
-					Note:      note,
+					Note:      reachabilityNote(p, isReachable),
 					Symbols:   symbols[name],
 				},
-			}
-			out = append(out, f)
+			})
 		}
 	}
 	return out, nil
+}
+
+// hasAnyManifest reports whether the tree holds any dependency manifest at all,
+// so offline mode only prints its note when there was something to scan.
+func hasAnyManifest(root string) bool {
+	if findPackageJSON(root) != "" {
+		return true
+	}
+	for _, eco := range ecosystems {
+		if findManifest(root, eco.manifest) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // findPackageJSON returns the shallowest package.json under root (skipping

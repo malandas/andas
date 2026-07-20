@@ -105,6 +105,27 @@ var rules = []Rule{
 		Validator: "twilio", // validated by pairing with a nearby auth token
 	},
 	{
+		ID:        "github-oauth",
+		Title:     "GitHub OAuth/App Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`gh[ousr]_[A-Za-z0-9]{36}`),
+		Validator: "github", // same identity/scopes endpoint as a PAT
+	},
+	{
+		ID:        "digitalocean-token",
+		Title:     "DigitalOcean Personal Access Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`dop_v1_[a-f0-9]{64}`),
+		Validator: "digitalocean",
+	},
+	{
+		ID:        "mailgun-key",
+		Title:     "Mailgun API Key",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`key-[0-9a-f]{32}`),
+		Validator: "mailgun",
+	},
+	{
 		ID:        "private-key",
 		Title:     "Private Key Block",
 		Severity:  finding.SevCritical,

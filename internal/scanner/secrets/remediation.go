@@ -28,6 +28,12 @@ func secretFix(ruleID string) string {
 		return "Revoke at https://platform.openai.com/api-keys and rotate."
 	case "twilio-account-sid":
 		return "Rotate the auth token in the Twilio console (Account → API keys & tokens)."
+	case "github-oauth":
+		return "Revoke the token in the GitHub OAuth/GitHub App settings and re-issue."
+	case "digitalocean-token":
+		return "Regenerate the token at https://cloud.digitalocean.com/account/api/tokens."
+	case "mailgun-key":
+		return "Rotate the key in the Mailgun dashboard (Settings → API Keys)."
 	case "private-key":
 		return "Treat the private key as compromised: rotate the key pair and re-issue any certs signed by it."
 	default:

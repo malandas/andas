@@ -124,14 +124,19 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 				fmt.Fprintf(w, "           %s\n", color(cYellow, "⏱ "+f.Context.Exposure, useColor))
 			}
 		case finding.KindVuln:
-			if f.Context.Reachable != nil && *f.Context.Reachable {
+			switch {
+			case f.Context.Reachable != nil && *f.Context.Reachable:
 				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ "+f.Context.Note, useColor))
 				if len(f.Context.Symbols) > 0 {
 					used := strings.Join(f.Context.Symbols, ", ")
 					fmt.Fprintf(w, "           %s\n", color(cYellow, "↳ your code uses: "+used, useColor))
 				}
-			} else {
+			case f.Context.Reachable != nil && !*f.Context.Reachable:
 				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ "+f.Context.Note+" — demoted", useColor))
+			default: // no reachability analysis for this ecosystem
+				if f.Context.Note != "" {
+					fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
+				}
 			}
 		}
 

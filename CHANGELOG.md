@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.1.0
+- Multi-language dependency scanning: Python (requirements.txt), Go (go.mod),
+  Ruby (Gemfile.lock), Rust (Cargo.lock), PHP (composer.lock) — all via OSV.dev,
+  alongside the existing npm/Yarn path (which keeps reachability analysis).
+- Three more live secret validators: GitHub OAuth/App tokens, DigitalOcean, Mailgun.
+
 ## v1.0.0
 - First stable release. andas is strictly read-only: it scans and reports,
   and never edits code, rotates keys, or opens PRs.

@@ -109,10 +109,11 @@ HTTP status: `2xx` = live, `401/403` = dead. It never writes, and never sends a
 secret anywhere except its legitimate provider. Use `--no-validate` for a fully
 offline scan.
 
-Validators today: GitHub, GitLab, Slack, Stripe, npm, SendGrid, Telegram,
-OpenAI, and the paired ones — **AWS** (an `AKIA…` key + a nearby secret, proven
-with a signed STS `GetCallerIdentity`) and **Twilio** (an `AC…` SID + a nearby
-auth token). Detection-only: Google, private-key blocks.
+Validators today: GitHub (PATs + OAuth/App tokens), GitLab, Slack, Stripe, npm,
+SendGrid, Telegram, OpenAI, DigitalOcean, Mailgun, and the paired ones —
+**AWS** (an `AKIA…` key + a nearby secret, proven with a signed STS
+`GetCallerIdentity`) and **Twilio** (an `AC…` SID + a nearby auth token).
+Detection-only: Google, private-key blocks.
 
 **andas is strictly read-only.** It scans files and makes only read-only
 requests to a credential's own provider — it never edits your code, rotates
@@ -166,7 +167,25 @@ Two more read-only signals that turn a list of findings into a real picture:
 
   Every line is grounded in something andas actually verified — never invented risk.
 
-## Dependency scanning with reachability (JS/TS)
+## Dependency scanning — many languages
+
+`andas` scans dependency manifests across ecosystems and cross-references every
+package against [OSV.dev](https://osv.dev):
+
+| Language | Manifest | Reachability |
+|----------|----------|--------------|
+| JavaScript / TypeScript | `package.json` + `package-lock.json` / `yarn.lock` | ✅ import-level + used symbols |
+| Python | `requirements.txt` (pinned) | — ranked by severity |
+| Go | `go.mod` | — ranked by severity |
+| Ruby | `Gemfile.lock` | — ranked by severity |
+| Rust | `Cargo.lock` | — ranked by severity |
+| PHP | `composer.lock` | — ranked by severity |
+
+JS/TS gets the full reachability treatment below; the others get
+vulnerability findings ranked by real severity (reachability for those
+ecosystems is on the roadmap).
+
+## Reachability, in depth (JS/TS)
 
 For a project with a `package.json`, `andas` also:
 
@@ -235,10 +254,11 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v0.9.0` — three scanners on one real-risk core, blast-radius scoring, **exposure
-timeline**, **attack-path narrative**, 10 live validators, entropy detection, a
-baseline workflow, a pre-commit guard, `.andasignore`, four report formats
-(terminal/HTML/SARIF/Markdown), and a 36-test suite. Strictly read-only:
+`v1.1.0` — **multi-language dependency scanning** (JS/TS, Python, Go, Ruby, Rust,
+PHP) and **12 live secret validators**, on one real-risk core with blast-radius
+scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
+a pre-commit guard, four report formats, and a 48-test suite. Strictly
+read-only:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|

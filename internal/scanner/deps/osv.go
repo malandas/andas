@@ -25,18 +25,21 @@ type advisory struct {
 	Severity finding.Severity
 }
 
-// queryOSV returns advisories keyed by package name for every package in g.
-func queryOSV(g *graph, timeoutS int) (map[string][]advisory, error) {
+// pkgRef is a resolved dependency in a specific OSV ecosystem (npm, PyPI, Go…).
+type pkgRef struct {
+	Name      string
+	Version   string
+	Ecosystem string
+}
+
+// queryOSV returns advisories keyed by package name for every ref. All refs in
+// one call may belong to different ecosystems — OSV's batch endpoint carries the
+// ecosystem per query.
+func queryOSV(refs []pkgRef, timeoutS int) (map[string][]advisory, error) {
 	if timeoutS <= 0 {
 		timeoutS = 15
 	}
 	client := &http.Client{Timeout: time.Duration(timeoutS) * time.Second}
-
-	// Stable ordering so batch results line up with the packages we sent.
-	names := make([]string, 0, len(g.byName))
-	for name := range g.byName {
-		names = append(names, name)
-	}
 
 	type osvQuery struct {
 		Version string `json:"version"`
@@ -48,11 +51,11 @@ func queryOSV(g *graph, timeoutS int) (map[string][]advisory, error) {
 	var batch struct {
 		Queries []osvQuery `json:"queries"`
 	}
-	for _, name := range names {
+	for _, r := range refs {
 		var q osvQuery
-		q.Version = g.byName[name].Version
-		q.Package.Name = name
-		q.Package.Ecosystem = "npm"
+		q.Version = r.Version
+		q.Package.Name = r.Name
+		q.Package.Ecosystem = r.Ecosystem
 		batch.Queries = append(batch.Queries, q)
 	}
 
@@ -76,10 +79,10 @@ func queryOSV(g *graph, timeoutS int) (map[string][]advisory, error) {
 
 	out := map[string][]advisory{}
 	for i, res := range batchResp.Results {
-		if i >= len(names) || len(res.Vulns) == 0 {
+		if i >= len(refs) || len(res.Vulns) == 0 {
 			continue
 		}
-		name := names[i]
+		name := refs[i].Name
 		for _, v := range res.Vulns {
 			out[name] = append(out[name], fetchDetails(client, v.ID))
 		}

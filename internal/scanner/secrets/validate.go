@@ -47,9 +47,43 @@ func validate(kind, secret string, timeoutS int) Result {
 		return validateTelegram(c, secret)
 	case "openai":
 		return validateOpenAI(c, secret)
+	case "digitalocean":
+		return validateDigitalOcean(c, secret)
+	case "mailgun":
+		return validateMailgun(c, secret)
 	default:
 		return Result{Note: "no validator"}
 	}
+}
+
+func validateDigitalOcean(c *http.Client, secret string) Result {
+	code, _, _, err := doReq(c, "GET", "https://api.digitalocean.com/v2/account",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Scopes = []string{"full account access"}
+	r.Privileged = true // DO tokens manage droplets, DNS, billing
+	return r
+}
+
+func validateMailgun(c *http.Client, secret string) Result {
+	// Mailgun uses HTTP basic auth with username "api".
+	req, _ := http.NewRequest("GET", "https://api.mailgun.net/v3/domains", nil)
+	req.SetBasicAuth("api", secret)
+	resp, err := c.Do(req)
+	if err != nil {
+		return Result{Note: "network error: " + err.Error()}
+	}
+	defer resp.Body.Close()
+	r, ok := classify(resp.StatusCode, nil)
+	if !ok {
+		return r
+	}
+	r.Scopes = []string{"send email"}
+	r.Privileged = true
+	return r
 }
 
 func validateOpenAI(c *http.Client, secret string) Result {
