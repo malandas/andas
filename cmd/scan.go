@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
+
+	"github.com/malandas/andas/internal/config"
 
 	"github.com/malandas/andas/internal/finding"
 	"github.com/malandas/andas/internal/report"
@@ -68,12 +71,18 @@ func runScan(args []string) int {
 		return 2
 	}
 
+	cfg, err := config.Load(root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "andas: reading .andas.yml: %v\n", err)
+		return 1
+	}
+
 	opts := scanner.Options{
 		Validate:    !*noValidate && !*offline,
 		Offline:     *offline,
 		Entropy:     !*noEntropy,
 		TimeoutS:    *timeout,
-		IgnorePaths: scanner.LoadIgnore(root),
+		IgnorePaths: append(scanner.LoadIgnore(root), cfg.Ignore...),
 	}
 
 	scanners := []scanner.Scanner{
@@ -86,15 +95,15 @@ func runScan(args []string) int {
 		scanners = append(scanners, githistory.New())
 	}
 
-	var all []finding.Finding
-	for _, s := range scanners {
-		found, err := s.Scan(root, opts)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "andas: scanner %q failed: %v\n", s.Name(), err)
-			return 1
-		}
-		all = append(all, found...)
+	// Scanners run concurrently — each walks the tree independently, so on a big
+	// repo this turns a sum of scan times into roughly the slowest single one.
+	all, err := runScanners(scanners, root, opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "andas: %v\n", err)
+		return 1
 	}
+	// Drop findings for any rule disabled in .andas.yml.
+	all = filterDisabled(all, cfg)
 
 	// --update-baseline: accept the current state and stop, so future scans
 	// report only what appears afterwards.
@@ -156,10 +165,62 @@ func runScan(args []string) int {
 		fmt.Fprintf(os.Stderr, "andas: Markdown report written to %s\n", *mdOut)
 	}
 
-	if report.HighestRisk(all) >= parseSeverity(*failOn) {
+	// The .andas.yml fail-on applies only when the flag was left at its default.
+	failLevel := *failOn
+	if cfg.FailOn != "" && *failOn == "high" {
+		failLevel = cfg.FailOn
+	}
+	if report.HighestRisk(all) >= parseSeverity(failLevel) {
 		return 1
 	}
 	return 0
+}
+
+// runScanners runs every scanner concurrently and returns the merged findings.
+// Ordering within `all` doesn't matter — the report ranks by real risk anyway.
+func runScanners(scanners []scanner.Scanner, root string, opts scanner.Options) ([]finding.Finding, error) {
+	type result struct {
+		findings []finding.Finding
+		err      error
+	}
+	results := make([]result, len(scanners))
+	var wg sync.WaitGroup
+	for i, s := range scanners {
+		wg.Add(1)
+		go func(i int, s scanner.Scanner) {
+			defer wg.Done()
+			f, err := s.Scan(root, opts)
+			if err != nil {
+				results[i] = result{err: fmt.Errorf("scanner %q failed: %w", s.Name(), err)}
+				return
+			}
+			results[i] = result{findings: f}
+		}(i, s)
+	}
+	wg.Wait()
+
+	var all []finding.Finding
+	for _, r := range results {
+		if r.err != nil {
+			return nil, r.err
+		}
+		all = append(all, r.findings...)
+	}
+	return all, nil
+}
+
+// filterDisabled drops findings whose rule id is switched off in .andas.yml.
+func filterDisabled(all []finding.Finding, cfg *config.Config) []finding.Finding {
+	if len(cfg.Disable) == 0 {
+		return all
+	}
+	kept := all[:0]
+	for _, f := range all {
+		if !cfg.Disabled(f.RuleID) {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 // writeFile creates path and hands the writer to render.

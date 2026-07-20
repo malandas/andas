@@ -43,6 +43,7 @@ andas scan . --html out.html  # write a shareable HTML report
 andas scan . --sarif r.sarif  # SARIF for CI / GitHub code scanning
 andas scan . --json           # machine-readable output
 andas scan . --offline        # no network calls at all
+andas image myimg.tar         # scan a docker-saved image for vulnerable OS packages
 ```
 
 ### Adopting on a repo that already has debt
@@ -251,9 +252,9 @@ raises a finding's confidence, never lowers it.
   `curl ... | bash`, `chmod 777`.
 - **docker-compose** — `privileged: true`, the Docker socket mounted into a
   service, host networking.
-- **GitHub Actions** — script injection via `${{ github.event.* }}` in `run:`,
-  `pull_request_target` (secrets on untrusted PR code), third-party actions
-  pinned to a moving branch instead of a commit SHA.
+- **GitHub Actions** — script injection via `${{ github.event.* }}` in `run:`, `pull_request_target`, third-party actions pinned to a moving branch.
+- **Terraform** — security groups open to `0.0.0.0/0`, public bucket ACLs, encryption disabled, hardcoded credentials.
+- **Kubernetes** — privileged containers, host namespaces, run-as-root, privilege escalation allowed.
 
 ## Reports & CI
 
@@ -266,6 +267,21 @@ raises a finding's confidence, never lowers it.
 - Every finding carries a concrete **fix** line (rotation link, upgrade target).
 
 A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
+
+## Configuration
+
+Drop an optional `.andas.yml` in the repo root to tune a scan without flags:
+
+```yaml
+fail-on: critical      # default gate level
+disable:               # silence specific rules by id
+  - docker-latest-tag
+  - gha-unpinned-action
+ignore:                # extra ignore globs (merged with .andasignore)
+  - testdata
+```
+
+Scanners run **concurrently**, so on a large repo the total scan time is roughly the slowest single scanner rather than the sum of all of them.
 
 ## Development
 

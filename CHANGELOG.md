@@ -3,6 +3,18 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.9.0
+- Scanners now run concurrently — on a large repo the scan takes about as long
+  as its slowest single scanner instead of the sum. OSV detail lookups are
+  fetched in parallel too.
+- Container image scanning: `andas image <image.tar>` reads a `docker save`
+  tarball, extracts the OS package database (dpkg/apk), and reports vulnerable
+  packages via OSV (Debian/Ubuntu/Alpine, versioned ecosystems).
+- IaC scanner extended to Terraform (open security groups, public ACLs,
+  disabled encryption, hardcoded creds) and Kubernetes (privileged, host
+  namespaces, run-as-root, privilege escalation).
+- Optional .andas.yml config: disable rules, add ignore globs, set fail-on.
+
 ## v1.8.0
 - SAST gains a light intra-procedural taint tracker: a variable assigned from a
   user-input source (request.args, $_GET, ...) taints later uses of it within

@@ -68,6 +68,34 @@ var rules = []rule{
 	{"gha-unpinned-action", "Third-party action pinned to a moving ref", finding.SevMedium, "gha",
 		regexp.MustCompile(`(?i)uses:\s*[^@\s]+@(?:main|master)\b`),
 		"Pin third-party actions to a full commit SHA; a moving branch can be changed under you."},
+
+	// --- Terraform ---
+	{"tf-public-ingress", "Security group open to the world (0.0.0.0/0)", finding.SevHigh, "terraform",
+		regexp.MustCompile(`cidr_blocks\s*=\s*\[[^\]]*"0\.0\.0\.0/0"`),
+		"Restrict the CIDR to known ranges; 0.0.0.0/0 exposes the port to the whole internet."},
+	{"tf-public-acl", "Storage bucket ACL set to public", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)acl\s*=\s*"public-read(?:-write)?"`),
+		"Make the bucket private and grant access with scoped policies, not a public ACL."},
+	{"tf-unencrypted", "Encryption explicitly disabled", finding.SevMedium, "terraform",
+		regexp.MustCompile(`(?i)(?:encrypted|encryption)\s*=\s*false`),
+		"Enable encryption at rest for this resource."},
+	{"tf-hardcoded-secret", "Hardcoded credential in Terraform", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)(?:password|secret_key|access_key|private_key)\s*=\s*"[^"$][^"]{6,}"`),
+		"Move the secret to a variable or a secrets manager; never commit it in .tf."},
+
+	// --- Kubernetes ---
+	{"k8s-privileged", "Privileged container", finding.SevHigh, "k8s",
+		regexp.MustCompile(`(?i)privileged:\s*true`),
+		"Drop privileged: true; grant only the specific capabilities the container needs."},
+	{"k8s-run-as-root", "Container allowed to run as root", finding.SevMedium, "k8s",
+		regexp.MustCompile(`(?i)runAsNonRoot:\s*false`),
+		"Set runAsNonRoot: true and a non-zero runAsUser."},
+	{"k8s-host-namespace", "Pod shares a host namespace", finding.SevHigh, "k8s",
+		regexp.MustCompile(`(?i)host(?:Network|PID|IPC):\s*true`),
+		"Host namespaces break pod isolation; remove them unless strictly required."},
+	{"k8s-allow-priv-esc", "Privilege escalation allowed", finding.SevMedium, "k8s",
+		regexp.MustCompile(`(?i)allowPrivilegeEscalation:\s*true`),
+		"Set allowPrivilegeEscalation: false in the container securityContext."},
 }
 
 func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, error) {
@@ -77,7 +105,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	}
 	var out []finding.Finding
 	for _, f := range files {
-		kind := fileKind(f.Path)
+		kind := classify(f.Path, f.Lines)
 		if kind == "" {
 			continue
 		}
@@ -103,19 +131,45 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	return out, nil
 }
 
-// fileKind classifies a path into the config family whose rules apply, or "".
-func fileKind(path string) string {
+// classify decides which config family's rules apply to a file. Dockerfiles,
+// compose files, workflows, and Terraform are recognised by name; Kubernetes
+// manifests are recognised by content (a YAML with apiVersion + kind), since
+// they have no distinguishing filename.
+func classify(path string, lines []string) string {
 	base := filepath.Base(path)
 	dir := filepath.ToSlash(filepath.Dir(path))
+	isYAML := strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".yaml")
 	switch {
 	case base == "Dockerfile" || strings.HasPrefix(base, "Dockerfile.") || strings.HasSuffix(base, ".Dockerfile"):
 		return "dockerfile"
 	case base == "docker-compose.yml" || base == "docker-compose.yaml" || base == "compose.yml" || base == "compose.yaml":
 		return "compose"
-	case strings.Contains(dir, ".github/workflows") && (strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".yaml")):
+	case strings.Contains(dir, ".github/workflows") && isYAML:
 		return "gha"
+	case strings.HasSuffix(base, ".tf"):
+		return "terraform"
+	case isYAML && looksKubernetes(lines):
+		return "k8s"
 	}
 	return ""
+}
+
+// looksKubernetes reports whether a YAML file is a Kubernetes manifest.
+func looksKubernetes(lines []string) bool {
+	var hasAPI, hasKind bool
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "apiVersion:") {
+			hasAPI = true
+		}
+		if strings.HasPrefix(t, "kind:") {
+			hasKind = true
+		}
+		if hasAPI && hasKind {
+			return true
+		}
+	}
+	return false
 }
 
 func kindLabel(kind string) string {
@@ -126,6 +180,10 @@ func kindLabel(kind string) string {
 		return "docker-compose"
 	case "gha":
 		return "GitHub Actions"
+	case "terraform":
+		return "Terraform"
+	case "k8s":
+		return "Kubernetes"
 	}
 	return kind
 }

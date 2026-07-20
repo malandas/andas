@@ -31,14 +31,14 @@ func hasRule(fs []finding.Finding, id string) bool {
 	return false
 }
 
-func TestFileKind(t *testing.T) {
+func TestClassify(t *testing.T) {
 	cases := map[string]string{
 		"Dockerfile": "dockerfile", "api.Dockerfile": "dockerfile",
 		"docker-compose.yml": "compose", "compose.yaml": "compose",
 		".github/workflows/ci.yml": "gha", "README.md": "", "app.js": "",
 	}
 	for path, want := range cases {
-		if got := fileKind(path); got != want {
+		if got := classify(path, nil); got != want {
 			t.Errorf("fileKind(%q) = %q, want %q", path, got, want)
 		}
 	}
@@ -76,5 +76,31 @@ func TestIaC_IgnoresNonConfigFiles(t *testing.T) {
 	// The same content in a plain file must not trigger config rules.
 	if fs := scan(t, "notes.txt", "privileged: true\nUSER root\n"); len(fs) != 0 {
 		t.Errorf("non-config file should be clean, got %v", fs)
+	}
+}
+
+func TestIaC_Terraform(t *testing.T) {
+	src := `resource "x" "y" {
+  cidr_blocks = ["0.0.0.0/0"]
+  acl = "public-read"
+  password = "hunter2supersecret"
+}`
+	fs := scan(t, "main.tf", src)
+	for _, id := range []string{"tf-public-ingress", "tf-public-acl", "tf-hardcoded-secret"} {
+		if !hasRule(fs, id) {
+			t.Errorf("terraform: missing rule %q", id)
+		}
+	}
+}
+
+func TestIaC_Kubernetes(t *testing.T) {
+	src := "apiVersion: v1\nkind: Pod\nspec:\n  hostPID: true\n  securityContext:\n    privileged: true\n"
+	fs := scan(t, "pod.yaml", src)
+	if !hasRule(fs, "k8s-privileged") || !hasRule(fs, "k8s-host-namespace") {
+		t.Errorf("k8s rules missing: %v", fs)
+	}
+	// A plain YAML without apiVersion/kind must NOT be treated as k8s.
+	if fs2 := scan(t, "config.yaml", "privileged: true\n"); len(fs2) != 0 {
+		t.Errorf("non-k8s yaml should be clean, got %v", fs2)
 	}
 }
