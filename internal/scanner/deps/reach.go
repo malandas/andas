@@ -25,8 +25,8 @@ var reImport = regexp.MustCompile(`(?:from|require\(|import\()\s*['"]([^'"]+)['"
 
 // importedPackages walks the source tree under root and returns the set of
 // bare package names it imports (local "./" and absolute imports excluded).
-func importedPackages(root string) (map[string]bool, error) {
-	files, err := scanner.WalkText(root)
+func importedPackages(root string, ignore []string) (map[string]bool, error) {
+	files, err := scanner.WalkText(root, ignore)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +85,8 @@ var (
 // symbols the app's source appears to use. Named imports are taken directly;
 // for a default/namespace binding it finds `binding.member` accesses across the
 // same file.
-func usedSymbols(root string, wanted map[string]bool) (map[string][]string, error) {
-	files, err := scanner.WalkText(root)
+func usedSymbols(root string, wanted map[string]bool, ignore []string) (map[string][]string, error) {
+	files, err := scanner.WalkText(root, ignore)
 	if err != nil {
 		return nil, err
 	}

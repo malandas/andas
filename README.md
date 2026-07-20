@@ -40,6 +40,24 @@ andas scan . --baseline andas-baseline.json --update-baseline  # accept today's 
 andas scan . --baseline andas-baseline.json                    # now only NEW risk fails CI
 ```
 
+### Guard your commits
+
+```sh
+andas hook install     # installs a git pre-commit hook
+andas hook status      # is it installed?
+andas hook uninstall   # remove it
+```
+
+The hook runs `andas scan . --offline --fail-on medium` before every commit, so
+a hardcoded secret is caught **before it enters history** — which is the leak
+you can never fully undo. Override a false positive with `git commit --no-verify`.
+
+### Ignoring paths
+
+Drop an `.andasignore` in the repo root, one pattern per line (like
+`.gitignore`): a path segment (`testdata`, `src/generated`), a glob (`*.min.js`),
+or a `#` comment. Matching files are skipped by the working-tree scanners.
+
 ### Flags
 
 | Flag | Default | Meaning |
@@ -152,9 +170,9 @@ validation, git plumbing, and file walking are covered by integration runs.
 
 ## Status
 
-`v0.6.0` — three scanners on one real-risk core, entropy detection of unknown
-secrets, a baseline workflow for repos with existing debt, and a unit-test suite
-guarding the core logic:
+`v0.7.0` — three scanners on one real-risk core, entropy detection of unknown
+secrets, a baseline workflow, a git pre-commit guard, `.andasignore` filtering,
+and a unit-test suite over the core logic:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|

@@ -66,10 +66,11 @@ func runScan(args []string) int {
 	}
 
 	opts := scanner.Options{
-		Validate: !*noValidate && !*offline,
-		Offline:  *offline,
-		Entropy:  !*noEntropy,
-		TimeoutS: *timeout,
+		Validate:    !*noValidate && !*offline,
+		Offline:     *offline,
+		Entropy:     !*noEntropy,
+		TimeoutS:    *timeout,
+		IgnorePaths: scanner.LoadIgnore(root),
 	}
 
 	scanners := []scanner.Scanner{

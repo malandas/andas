@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "0.6.0"
+const version = "0.7.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -18,6 +18,8 @@ func Execute() int {
 	switch os.Args[1] {
 	case "scan":
 		return runScan(os.Args[2:])
+	case "hook":
+		return runHook(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Printf("andas %s\n", version)
 		return 0
@@ -39,6 +41,8 @@ usage:
   andas scan . --history      also scan git history for removed secrets
   andas scan . --html r.html  write a shareable HTML report
   andas scan . --sarif r.sarif write SARIF for CI / code scanning
+  andas hook install          install a git pre-commit secret guard
+  andas hook uninstall        remove the pre-commit guard
   andas version               print version
   andas help                  show this help
 

@@ -17,7 +17,7 @@ func New() *Scanner { return &Scanner{} }
 func (s *Scanner) Name() string { return "secrets" }
 
 func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, error) {
-	files, err := scanner.WalkText(root)
+	files, err := scanner.WalkText(root, opts.IgnorePaths)
 	if err != nil {
 		return nil, err
 	}

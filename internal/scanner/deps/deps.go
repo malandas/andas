@@ -40,7 +40,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 
 	// Reachability is local and always runs — it's the context that matters
 	// even when we can reuse cached vuln data later.
-	imports, err := importedPackages(root)
+	imports, err := importedPackages(root, opts.IgnorePaths)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 			wanted[name] = true
 		}
 	}
-	symbols, err := usedSymbols(root, wanted)
+	symbols, err := usedSymbols(root, wanted, opts.IgnorePaths)
 	if err != nil {
 		return nil, err
 	}

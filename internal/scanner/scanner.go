@@ -22,10 +22,11 @@ type Scanner interface {
 
 // Options carries run-wide settings down to individual scanners.
 type Options struct {
-	Validate bool // perform live validation of secrets
-	Offline  bool // make no network calls at all (no validation, no OSV)
-	Entropy  bool // flag high-entropy secret-like values beyond the known rules
-	TimeoutS int  // per-request network timeout, seconds
+	Validate    bool     // perform live validation of secrets
+	Offline     bool     // make no network calls at all (no validation, no OSV)
+	Entropy     bool     // flag high-entropy secret-like values beyond the known rules
+	TimeoutS    int      // per-request network timeout, seconds
+	IgnorePaths []string // .andasignore patterns for file-based scanners
 }
 
 // Directories we never descend into: noise, vendored code, and VCS internals.
@@ -44,17 +45,22 @@ type TextFile struct {
 }
 
 // WalkText walks root and yields every readable, non-binary text file under
-// the size limit, skipping the directories in skipDirs.
-func WalkText(root string) ([]TextFile, error) {
+// the size limit, skipping the directories in skipDirs and anything matching a
+// user-supplied ignore pattern (from .andasignore).
+func WalkText(root string, ignore []string) ([]TextFile, error) {
 	var out []TextFile
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // unreadable entry: skip, don't abort the whole walk
 		}
+		rel, _ := filepath.Rel(root, path)
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			if skipDirs[d.Name()] || matchesIgnore(rel, d.Name(), ignore) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if matchesIgnore(rel, d.Name(), ignore) {
 			return nil
 		}
 		info, err := d.Info()
@@ -72,6 +78,44 @@ func WalkText(root string) ([]TextFile, error) {
 		return nil
 	})
 	return out, err
+}
+
+// LoadIgnore reads .andasignore from root, returning its patterns. A missing
+// file yields no patterns. Blank lines and lines starting with '#' are skipped.
+func LoadIgnore(root string) []string {
+	data, err := os.ReadFile(filepath.Join(root, ".andasignore"))
+	if err != nil {
+		return nil
+	}
+	var patterns []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		patterns = append(patterns, strings.TrimSuffix(line, "/"))
+	}
+	return patterns
+}
+
+// matchesIgnore reports whether a path should be skipped. A pattern matches when
+// it globs the relative path or the base name, or appears as a literal path
+// segment (so `build` or `src/generated` both work like a .gitignore entry).
+func matchesIgnore(rel, base string, patterns []string) bool {
+	rel = filepath.ToSlash(rel)
+	for _, p := range patterns {
+		p = filepath.ToSlash(p)
+		if ok, _ := filepath.Match(p, rel); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(p, base); ok {
+			return true
+		}
+		if rel == p || strings.HasPrefix(rel, p+"/") || strings.Contains(rel, "/"+p+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // isBinary uses the same heuristic as git: a NUL byte in the first 8000 bytes.

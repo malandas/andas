@@ -134,7 +134,7 @@ func TestImportedPackagesAndSymbols(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	imports, err := importedPackages(dir)
+	imports, err := importedPackages(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestImportedPackagesAndSymbols(t *testing.T) {
 		t.Error("relative import leaked into the package set")
 	}
 
-	syms, err := usedSymbols(dir, map[string]bool{"lodash": true})
+	syms, err := usedSymbols(dir, map[string]bool{"lodash": true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
