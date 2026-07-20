@@ -136,10 +136,25 @@ reports only the ones that were **removed but never rotated**.
 
 A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
 
+## Development
+
+```sh
+go build -o andas .   # build
+go test ./...         # run the test suite
+go vet ./...          # static checks
+```
+
+The suite covers the security-critical logic directly: the real-risk decision
+table, entropy precision (it must catch real secrets and reject placeholders),
+the npm/Yarn (v1 + Berry) lockfile parser, the reachability BFS, and the
+baseline round-trip (which must never persist raw secret material). Network
+validation, git plumbing, and file walking are covered by integration runs.
+
 ## Status
 
-`v0.5.0` — three scanners on one real-risk core, plus entropy detection of
-unknown secrets and a baseline workflow for adopting on repos with existing debt:
+`v0.6.0` — three scanners on one real-risk core, entropy detection of unknown
+secrets, a baseline workflow for repos with existing debt, and a unit-test suite
+guarding the core logic:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|
