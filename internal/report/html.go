@@ -25,6 +25,7 @@ func HTML(w io.Writer, findings []finding.Finding, target string) error {
 		Identity   string
 		Access     string
 		Privileged bool
+		Exposure   string
 		Promoted   bool
 		Demoted    bool
 	}
@@ -57,6 +58,7 @@ func HTML(w io.Writer, findings []finding.Finding, target string) error {
 		}
 		it.Identity = f.Context.Identity
 		it.Privileged = f.Context.Privileged
+		it.Exposure = f.Context.Exposure
 		if len(f.Context.Access) > 0 {
 			it.Access = join(f.Context.Access, ", ")
 		}
@@ -72,13 +74,14 @@ func HTML(w io.Writer, findings []finding.Finding, target string) error {
 	}
 
 	data := struct {
-		Target string
-		Real   int
-		Noise  int
-		Total  int
-		Counts map[string]int
-		Items  []item
-	}{target, real, noise, len(rows), counts, items}
+		Target     string
+		Real       int
+		Noise      int
+		Total      int
+		Counts     map[string]int
+		Items      []item
+		AttackPath []string
+	}{target, real, noise, len(rows), counts, items, AttackPath(findings)}
 
 	return htmlTemplate.Execute(w, data)
 }
@@ -119,6 +122,11 @@ var htmlTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   .ctx.sym{color:var(--med)}
   .ctx.idn{color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
   .ctx.priv{color:var(--crit);font-weight:700}
+  .ctx.exp{color:var(--med)}
+  .attack{background:var(--panel);border:1px solid var(--crit);border-radius:12px;padding:16px 18px;margin-bottom:26px}
+  .attack-h{color:var(--crit);font-weight:700;margin-bottom:8px;font-size:14px}
+  .attack ul{margin:0;padding-left:20px}
+  .attack li{margin:5px 0;font-size:13.5px}
   .fix{margin-top:8px;font-size:13px;color:var(--ok);padding-left:14px;border-left:2px solid var(--ok)}
   .sev-CRITICAL{border-left-color:var(--crit)} .sev-CRITICAL .badge{background:var(--crit);color:#0d1117}
   .sev-HIGH{border-left-color:var(--high)} .sev-HIGH .badge{background:var(--high);color:#0d1117}
@@ -142,6 +150,10 @@ var htmlTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   {{with index .Counts "LOW"}}<span style="flex:{{.}};background:var(--low)"></span>{{end}}
   {{with index .Counts "INFO"}}<span style="flex:{{.}};background:var(--info)"></span>{{end}}
 </div>
+{{if .AttackPath}}<div class="attack">
+  <div class="attack-h">⚔ Attack path</div>
+  <ul>{{range .AttackPath}}<li>{{.}}</li>{{end}}</ul>
+</div>{{end}}
 {{if .Items}}{{range .Items}}
 <div class="card {{.RiskClass}}">
   <div class="top"><span class="badge">{{.Risk}}</span><span class="title">{{.Title}}</span></div>
@@ -151,6 +163,7 @@ var htmlTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   {{if .Identity}}<div class="ctx idn">identity: {{.Identity}}</div>{{end}}
   {{if .Access}}<div class="ctx sym">🔓 can access: {{.Access}}</div>{{end}}
   {{if .Privileged}}<div class="ctx priv">⚠ HIGH-PRIVILEGE credential — maximum blast radius</div>{{end}}
+  {{if .Exposure}}<div class="ctx exp">⏱ {{.Exposure}}</div>{{end}}
   {{if .Symbols}}<div class="ctx sym">↳ your code uses: {{.Symbols}}</div>{{end}}
   {{if and .Fix .Promoted}}<div class="fix">→ {{.Fix}}</div>{{end}}
 </div>

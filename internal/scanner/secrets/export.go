@@ -57,6 +57,12 @@ func ValidateMatch(m RawMatch, contextText string, timeoutS int) (validated bool
 			return false, Result{Note: "no paired secret key found near it — cannot verify"}
 		}
 		return true, awsValidateSTS(m.Secret, secret, timeoutS)
+	case m.Validator == "twilio":
+		token := findTwilioToken(contextText, m.Secret)
+		if token == "" {
+			return false, Result{Note: "no paired auth token found near it — cannot verify"}
+		}
+		return true, twilioValidate(m.Secret, token, timeoutS)
 	default:
 		return true, validate(m.Validator, m.Secret, timeoutS)
 	}

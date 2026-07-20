@@ -28,6 +28,7 @@ func runScan(args []string) int {
 		asJSON     = fs.Bool("json", false, "emit JSON instead of the table")
 		htmlOut    = fs.String("html", "", "write a self-contained HTML report to this path")
 		sarifOut   = fs.String("sarif", "", "write a SARIF 2.1.0 report to this path (for CI/code scanning)")
+		mdOut      = fs.String("markdown", "", "write a PR-comment-style Markdown report to this path")
 		noColor    = fs.Bool("no-color", false, "disable coloured output")
 		timeout    = fs.Int("timeout", 15, "per-request network timeout, seconds")
 		failOn     = fs.String("fail-on", "high", "exit non-zero if real risk reaches this level (info|low|medium|high|critical)")
@@ -142,6 +143,13 @@ func runScan(args []string) int {
 			return 1
 		}
 		fmt.Fprintf(os.Stderr, "andas: SARIF report written to %s\n", *sarifOut)
+	}
+	if *mdOut != "" {
+		if err := writeFile(*mdOut, func(w io.Writer) error { return report.Markdown(w, all) }); err != nil {
+			fmt.Fprintf(os.Stderr, "andas: writing Markdown: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "andas: Markdown report written to %s\n", *mdOut)
 	}
 
 	if report.HighestRisk(all) >= parseSeverity(*failOn) {

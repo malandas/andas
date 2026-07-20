@@ -3,8 +3,10 @@ package githistory
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/malandas/andas/internal/finding"
+	"github.com/malandas/andas/internal/gitmeta"
 	"github.com/malandas/andas/internal/scanner"
 	"github.com/malandas/andas/internal/scanner/secrets"
 )
@@ -74,6 +76,9 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		commit, author, date := commitInfo(root, a.blobSHA)
 		if commit != "" {
 			fnd.File = fmt.Sprintf("git history @ %s (%s, %s)", commit, author, date)
+			if t, err := time.Parse("2006-01-02", date); err == nil {
+				fnd.Context.Exposure = gitmeta.Describe(t, time.Now())
+			}
 		} else {
 			fnd.File = "git history"
 		}

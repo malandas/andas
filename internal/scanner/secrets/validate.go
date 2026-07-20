@@ -45,9 +45,23 @@ func validate(kind, secret string, timeoutS int) Result {
 		return validateSendGrid(c, secret)
 	case "telegram":
 		return validateTelegram(c, secret)
+	case "openai":
+		return validateOpenAI(c, secret)
 	default:
 		return Result{Note: "no validator"}
 	}
+}
+
+func validateOpenAI(c *http.Client, secret string) Result {
+	code, _, _, err := doReq(c, "GET", "https://api.openai.com/v1/models",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Scopes = []string{"full API access (billable)"}
+	r.Privileged = true // a live OpenAI key spends money
+	return r
 }
 
 // doReq issues a request and returns the status, headers, and (capped) body.

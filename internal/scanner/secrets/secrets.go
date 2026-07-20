@@ -4,8 +4,10 @@ package secrets
 
 import (
 	"strings"
+	"time"
 
 	"github.com/malandas/andas/internal/finding"
+	"github.com/malandas/andas/internal/gitmeta"
 	"github.com/malandas/andas/internal/scanner"
 )
 
@@ -20,6 +22,19 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	files, err := scanner.WalkText(root, opts.IgnorePaths)
 	if err != nil {
 		return nil, err
+	}
+
+	repoAvail := gitmeta.Available(root)
+	now := time.Now()
+	// exposure fills the "how long has this been leaked?" field from git blame.
+	exposure := func(file string, line int) string {
+		if !repoAvail {
+			return ""
+		}
+		if t, ok := gitmeta.LineIntroduced(root, file, line); ok {
+			return gitmeta.Describe(t, now)
+		}
+		return ""
 	}
 
 	var out []finding.Finding
@@ -53,9 +68,16 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					} else {
 						fnd.Context.Note = "no paired secret key found near it — cannot verify"
 					}
+				case rule.Validator == "twilio":
+					if token := findTwilioToken(fileText, m); token != "" {
+						applyResult(&fnd.Context, twilioValidate(m, token, opts.TimeoutS))
+					} else {
+						fnd.Context.Note = "no paired auth token found near it — cannot verify"
+					}
 				default:
 					applyResult(&fnd.Context, validate(rule.Validator, m, opts.TimeoutS))
 				}
+				fnd.Context.Exposure = exposure(f.Path, lineNo+1)
 				out = append(out, fnd)
 			}
 
@@ -75,7 +97,10 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 						Match:    finding.Redact(v),
 						Severity: finding.SevMedium,
 						Fix:      secretFix(genericRuleID),
-						Context:  finding.Context{Note: "matched by entropy heuristic — unverified; baseline it if it's a false positive"},
+						Context: finding.Context{
+							Note:     "matched by entropy heuristic — unverified; baseline it if it's a false positive",
+							Exposure: exposure(f.Path, lineNo+1),
+						},
 					})
 				}
 			}

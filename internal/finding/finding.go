@@ -58,6 +58,9 @@ type Context struct {
 	Access     []string `json:"access,omitempty"`     // scopes/capabilities it grants
 	Privileged bool     `json:"privileged,omitempty"` // elevated/admin-level access
 
+	// Secrets: how long the secret has been exposed (from git blame / history).
+	Exposure string `json:"exposure,omitempty"`
+
 	// Vulnerabilities: reachability evidence (populated by a later module).
 	// nil = not analysed, true = the vulnerable code path is callable.
 	Reachable *bool `json:"reachable,omitempty"`

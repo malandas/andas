@@ -26,6 +26,8 @@ func secretFix(ruleID string) string {
 		return "Regenerate the key in Google Cloud Console → APIs & Services → Credentials, and add restrictions."
 	case "openai-key":
 		return "Revoke at https://platform.openai.com/api-keys and rotate."
+	case "twilio-account-sid":
+		return "Rotate the auth token in the Twilio console (Account → API keys & tokens)."
 	case "private-key":
 		return "Treat the private key as compromised: rotate the key pair and re-issue any certs signed by it."
 	default:

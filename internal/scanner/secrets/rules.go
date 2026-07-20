@@ -95,7 +95,14 @@ var rules = []Rule{
 		Title:     "OpenAI API Key",
 		Severity:  finding.SevHigh,
 		Pattern:   regexp.MustCompile(`sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}`),
-		Validator: "",
+		Validator: "openai",
+	},
+	{
+		ID:        "twilio-account-sid",
+		Title:     "Twilio Account SID",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`AC[0-9a-fA-F]{32}`),
+		Validator: "twilio", // validated by pairing with a nearby auth token
 	},
 	{
 		ID:        "private-key",

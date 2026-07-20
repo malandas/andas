@@ -77,6 +77,7 @@ or a `#` comment. Matching files are skipped by the working-tree scanners.
 | `--no-entropy` | off | Disable entropy-based detection of unknown/custom secrets. |
 | `--html <path>` | — | Write a self-contained HTML report. |
 | `--sarif <path>` | — | Write a SARIF 2.1.0 report for CI / code scanning. |
+| `--markdown <path>` | — | Write a PR-comment-style Markdown report. |
 | `--no-validate` | off | Skip live validation of secrets. |
 | `--offline` | off | Make no network calls at all (no validation, no OSV lookup). |
 | `--json` | off | Emit JSON instead of the table. |
@@ -105,10 +106,14 @@ HTTP status: `2xx` = live, `401/403` = dead. It never writes, and never sends a
 secret anywhere except its legitimate provider. Use `--no-validate` for a fully
 offline scan.
 
-Validators today: GitHub, GitLab, Slack, Stripe, npm, SendGrid, Telegram, and
-**AWS** (which pairs a detected `AKIA…` access key ID with a nearby secret and
-proves the pair with a signed, read-only STS `GetCallerIdentity` call).
-Detection-only (no validator yet): Google, OpenAI, private-key blocks.
+Validators today: GitHub, GitLab, Slack, Stripe, npm, SendGrid, Telegram,
+OpenAI, and the paired ones — **AWS** (an `AKIA…` key + a nearby secret, proven
+with a signed STS `GetCallerIdentity`) and **Twilio** (an `AC…` SID + a nearby
+auth token). Detection-only: Google, private-key blocks.
+
+**andas is strictly read-only.** It scans files and makes only read-only
+requests to a credential's own provider — it never edits your code, rotates
+keys, or opens PRs. It shows you the risk and the fix; the action stays with you.
 
 Beyond these known shapes, an **entropy heuristic** catches custom/internal
 secrets: a high-randomness value assigned to a secret-looking name (`*token*`,
@@ -138,6 +143,25 @@ CRITICAL  GitHub Personal Access Token
 
 High-privilege live secrets sort to the very top of the report — same severity,
 bigger blast radius.
+
+## Exposure timeline & attack path
+
+Two more read-only signals that turn a list of findings into a real picture:
+
+- **Exposure timeline** — from git blame (and commit dates for history leaks),
+  andas tells you *how long* a secret has been exposed: `⏱ exposed ~47 days
+  (since 2025-11-08)`. A key leaked months ago is a different emergency from one
+  added today.
+- **Attack path** — andas narrates how the confirmed findings chain together:
+
+  ```
+  ⚔ attack path
+     • A live, high-privilege AWS (arn:…:root) is exposed — an attacker gains account access.
+     • Multiple live credentials are exposed together (AWS, GitHub) — one leaked repo hands an attacker all of them.
+     • A credential removed from the code is still live in git history — deleting the line never rotated the key.
+  ```
+
+  Every line is grounded in something andas actually verified — never invented risk.
 
 ## Dependency scanning with reachability (JS/TS)
 
@@ -183,6 +207,8 @@ reports only the ones that were **removed but never rotated**.
 - `--sarif <path>` — SARIF 2.1.0; the level of each result is driven by **real
   risk**, so a dead secret lands as a note and a live one as an error. Upload it
   with `github/codeql-action/upload-sarif` to populate the Security tab.
+- `--markdown <path>` — a compact, PR-comment-style summary. andas only writes
+  the file; posting it (if you want) is your CI's job — andas stays read-only.
 - Every finding carries a concrete **fix** line (rotation link, upgrade target).
 
 A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
@@ -203,9 +229,10 @@ validation, git plumbing, and file walking are covered by integration runs.
 
 ## Status
 
-`v0.8.0` — three scanners on one real-risk core, **blast-radius scoring** for
-live secrets, entropy detection of unknown secrets, a baseline workflow, a git
-pre-commit guard, `.andasignore` filtering, and a unit-test suite:
+`v0.9.0` — three scanners on one real-risk core, blast-radius scoring, **exposure
+timeline**, **attack-path narrative**, 10 live validators, entropy detection, a
+baseline workflow, a pre-commit guard, `.andasignore`, four report formats
+(terminal/HTML/SARIF/Markdown), and a 36-test suite. Strictly read-only:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|

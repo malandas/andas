@@ -120,6 +120,9 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 			case f.Context.Note != "":
 				fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
 			}
+			if f.Context.Exposure != "" {
+				fmt.Fprintf(w, "           %s\n", color(cYellow, "⏱ "+f.Context.Exposure, useColor))
+			}
 		case finding.KindVuln:
 			if f.Context.Reachable != nil && *f.Context.Reachable {
 				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ "+f.Context.Note, useColor))
@@ -135,6 +138,14 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 		// Remediation, shown only where it matters — on real risks.
 		if f.Fix != "" && r.risk >= finding.SevMedium {
 			fmt.Fprintf(w, "           %s\n", color(cGreen, "→ fix: "+f.Fix, useColor))
+		}
+		fmt.Fprintln(w)
+	}
+
+	if ap := AttackPath(findings); len(ap) > 0 {
+		fmt.Fprintln(w, color(cRed, "  ⚔ attack path", useColor))
+		for _, line := range ap {
+			fmt.Fprintf(w, "     %s\n", color(cGray, "• "+line, useColor))
 		}
 		fmt.Fprintln(w)
 	}
