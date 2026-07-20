@@ -1,14 +1,14 @@
-# naqi
+# andas
 
 **نَقِّ مخرجاتك الأمنية من الضجيج.** — *Sift real security risk from the noise.*
 
-Most security scanners bury you in alerts. `naqi` answers the question they
+Most security scanners bury you in alerts. `andas` answers the question they
 don't: **is this risk actually real for *your* project, or is it noise?**
 
-- A detected secret is only an emergency if it's **still live**. `naqi` asks the
+- A detected secret is only an emergency if it's **still live**. `andas` asks the
   provider — safely, read-only — and demotes dead credentials out of your way.
 - (Roadmap) A CVE in a dependency only matters if the vulnerable code is
-  **reachable** from your app. `naqi` will trace that too.
+  **reachable** from your app. `andas` will trace that too.
 
 One command. One dependency-free binary. Linux, macOS, Windows.
 
@@ -17,16 +17,16 @@ One command. One dependency-free binary. Linux, macOS, Windows.
 Download the binary for your OS from `dist/`, or build from source:
 
 ```sh
-go build -o naqi .
+go build -o andas .
 ```
 
 ## Usage
 
 ```sh
-naqi scan               # scan the current directory
-naqi scan ./myproject   # scan a specific path
-naqi scan . --json      # machine-readable output for CI
-naqi scan . --no-validate   # offline: detect only, no network calls
+andas scan               # scan the current directory
+andas scan ./myproject   # scan a specific path
+andas scan . --json      # machine-readable output for CI
+andas scan . --no-validate   # offline: detect only, no network calls
 ```
 
 ### Flags
@@ -47,14 +47,14 @@ gate a CI pipeline on live secrets while ignoring dead ones.
 Every finding carries two levels:
 
 - **Severity** — the theoretical/pattern-based level (what other tools give you).
-- **Real risk** — after `naqi`'s context check:
+- **Real risk** — after `andas`'s context check:
   - secret **verified live** → promoted to `CRITICAL`
   - secret **verified dead** → demoted to `INFO` (this is the noise we remove)
   - couldn't verify → keeps its theoretical severity
 
 ## What live validation actually does
 
-For each secret type with a validator, `naqi` sends **one read-only request to
+For each secret type with a validator, `andas` sends **one read-only request to
 that credential's own provider** (e.g. `GET api.github.com/user`) and reads the
 HTTP status: `2xx` = live, `401/403` = dead. It never writes, and never sends a
 secret anywhere except its legitimate provider. Use `--no-validate` for a fully

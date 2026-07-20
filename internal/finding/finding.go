@@ -1,11 +1,11 @@
 // Package finding defines the unified result model shared by every scanner.
 //
-// The whole point of naqi is the distinction between two numbers:
+// The whole point of andas is the distinction between two numbers:
 //   - Severity: the theoretical severity of an issue (e.g. a CVSS score, or
 //     "this looks like an AWS key"). Every scanner in the world reports this.
 //   - RealRisk: the contextual risk *for this project specifically*, after we
 //     ask the expensive question — is this secret actually live? is this
-//     vulnerable function actually reachable? That question is naqi's job.
+//     vulnerable function actually reachable? That question is andas's job.
 package finding
 
 import "strings"
@@ -44,7 +44,7 @@ func (s Severity) String() string {
 	}
 }
 
-// Context holds the evidence naqi gathers to turn a raw detection into a
+// Context holds the evidence andas gathers to turn a raw detection into a
 // real-risk judgement. Fields are populated per-Kind.
 type Context struct {
 	// Secrets: live-validation evidence.
@@ -69,7 +69,7 @@ type Finding struct {
 	Context  Context  `json:"context"`
 }
 
-// RealRisk is the contextual score naqi actually ranks and reports on.
+// RealRisk is the contextual score andas actually ranks and reports on.
 //
 // The rule is simple and is the heart of the product: proven-exploitable
 // issues get promoted, proven-harmless ones get demoted into the noise, and

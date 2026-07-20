@@ -7,7 +7,7 @@ import (
 )
 
 // validate performs a safe, read-only call to the credential's own provider to
-// learn whether it is still active. This is the core of naqi: a dead secret is
+// learn whether it is still active. This is the core of andas: a dead secret is
 // noise, a live one is an emergency, and only the provider can tell them apart.
 //
 // Every check here is non-mutating (it reads identity/account info, never

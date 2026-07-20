@@ -1,5 +1,5 @@
 // Package report renders findings for humans and machines. Everything is
-// ordered by RealRisk, because that ordering is the value naqi adds.
+// ordered by RealRisk, because that ordering is the value andas adds.
 package report
 
 import (
@@ -8,7 +8,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/mm-fid/naqi/internal/finding"
+	"github.com/mm-fid/andas/internal/finding"
 )
 
 // ANSI colours, disabled automatically when NoColor is set.
@@ -73,7 +73,7 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, color(cBold, "  naqi — real-risk report", useColor))
+	fmt.Fprintln(w, color(cBold, "  andas — real-risk report", useColor))
 	fmt.Fprintln(w, color(cGray, "  ─────────────────────────", useColor))
 
 	if len(rows) == 0 {

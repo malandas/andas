@@ -1,10 +1,10 @@
-// Package secrets detects hardcoded credentials and — naqi's differentiator —
+// Package secrets detects hardcoded credentials and — andas's differentiator —
 // verifies whether each one is still live before deciding how loud to be.
 package secrets
 
 import (
-	"github.com/mm-fid/naqi/internal/finding"
-	"github.com/mm-fid/naqi/internal/scanner"
+	"github.com/mm-fid/andas/internal/finding"
+	"github.com/mm-fid/andas/internal/scanner"
 )
 
 // Scanner finds secrets and, when enabled, validates them.

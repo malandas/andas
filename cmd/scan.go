@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mm-fid/naqi/internal/finding"
-	"github.com/mm-fid/naqi/internal/report"
-	"github.com/mm-fid/naqi/internal/scanner"
-	"github.com/mm-fid/naqi/internal/scanner/secrets"
+	"github.com/mm-fid/andas/internal/finding"
+	"github.com/mm-fid/andas/internal/report"
+	"github.com/mm-fid/andas/internal/scanner"
+	"github.com/mm-fid/andas/internal/scanner/secrets"
 )
 
-// runScan implements `naqi scan [path]`.
+// runScan implements `andas scan [path]`.
 func runScan(args []string) int {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	var (
@@ -22,14 +22,14 @@ func runScan(args []string) int {
 		failOn     = fs.String("fail-on", "high", "exit non-zero if real risk reaches this level (info|low|medium|high|critical)")
 	)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: naqi scan [path] [flags]")
+		fmt.Fprintln(os.Stderr, "usage: andas scan [path] [flags]")
 		fmt.Fprintln(os.Stderr, "\nScans a directory for secrets and reports them by REAL risk")
 		fmt.Fprintln(os.Stderr, "(live secrets promoted, dead ones demoted). Defaults to the")
 		fmt.Fprintln(os.Stderr, "current directory.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	// The stdlib flag package stops at the first non-flag argument, so a
-	// natural invocation like `naqi scan ./path --json` would silently ignore
+	// natural invocation like `andas scan ./path --json` would silently ignore
 	// --json. Loop the parse, harvesting positional args, so flags and the
 	// path may appear in any order.
 	var positional []string
@@ -50,7 +50,7 @@ func runScan(args []string) int {
 		root = positional[0]
 	}
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "naqi: %q is not a readable directory\n", root)
+		fmt.Fprintf(os.Stderr, "andas: %q is not a readable directory\n", root)
 		return 2
 	}
 
@@ -65,7 +65,7 @@ func runScan(args []string) int {
 	for _, s := range scanners {
 		found, err := s.Scan(root, opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "naqi: scanner %q failed: %v\n", s.Name(), err)
+			fmt.Fprintf(os.Stderr, "andas: scanner %q failed: %v\n", s.Name(), err)
 			return 1
 		}
 		all = append(all, found...)
@@ -73,7 +73,7 @@ func runScan(args []string) int {
 
 	if *asJSON {
 		if err := report.JSON(os.Stdout, all); err != nil {
-			fmt.Fprintf(os.Stderr, "naqi: %v\n", err)
+			fmt.Fprintf(os.Stderr, "andas: %v\n", err)
 			return 1
 		}
 	} else {

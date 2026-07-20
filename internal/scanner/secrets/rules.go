@@ -3,7 +3,7 @@ package secrets
 import (
 	"regexp"
 
-	"github.com/mm-fid/naqi/internal/finding"
+	"github.com/mm-fid/andas/internal/finding"
 )
 
 // Rule is one secret-detection pattern. Validator names the live-check to run
@@ -18,7 +18,7 @@ type Rule struct {
 }
 
 // rules is the built-in detection set. Patterns are deliberately tight to keep
-// false positives low — naqi's promise is signal, not noise.
+// false positives low — andas's promise is signal, not noise.
 var rules = []Rule{
 	{
 		ID:        "github-pat",
