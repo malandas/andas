@@ -138,6 +138,12 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 					fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
 				}
 			}
+		case finding.KindCode:
+			if f.Context.UserInput {
+				fmt.Fprintf(w, "           %s\n", color(cRed, "⚠ "+f.Context.Note, useColor))
+			} else if f.Context.Note != "" {
+				fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
+			}
 		}
 
 		// Remediation, shown only where it matters — on real risks.

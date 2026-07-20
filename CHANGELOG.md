@@ -3,6 +3,15 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.6.0
+- New SAST scanner: statically flags dangerous patterns in your own source —
+  code injection (eval/new Function/exec), OS command execution, unsafe
+  deserialization (pickle/Marshal/unserialize/yaml.load), disabled TLS
+  verification, XSS sinks, and interpolated SQL — across JS/TS, Python, Ruby,
+  PHP, and Go, tagged with CWE ids. Each finding notes whether user-controlled
+  input appears on the same line (the cheap reachability signal). Tight,
+  high-signal rules; pattern-based, not full taint analysis.
+
 ## v1.5.0
 - Function-level evidence completed for all six ecosystems: added Ruby
   (gem->constant, Const::x / Const.x), Rust (crate::Item), and PHP (use

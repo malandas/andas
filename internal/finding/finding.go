@@ -16,6 +16,7 @@ type Kind string
 const (
 	KindSecret Kind = "secret"
 	KindVuln   Kind = "vulnerability"
+	KindCode   Kind = "code" // a dangerous pattern in the user's own source (SAST)
 )
 
 // Severity is an ordered risk level.
@@ -70,6 +71,11 @@ type Context struct {
 	// downgrade on this, since mapping an advisory to exact functions is
 	// unreliable and a false "safe" is worse than a false alarm.
 	Symbols []string `json:"symbols,omitempty"`
+
+	// Code (SAST): the CWE id, and whether user-controlled input appears on the
+	// same line — a dangerous sink fed by user input is far likelier to be real.
+	CWE       string `json:"cwe,omitempty"`
+	UserInput bool   `json:"user_input,omitempty"`
 }
 
 // Finding is a single issue surfaced by a scanner.
