@@ -24,6 +24,7 @@ type Scanner interface {
 type Options struct {
 	Validate bool // perform live validation of secrets
 	Offline  bool // make no network calls at all (no validation, no OSV)
+	Entropy  bool // flag high-entropy secret-like values beyond the known rules
 	TimeoutS int  // per-request network timeout, seconds
 }
 

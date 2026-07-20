@@ -64,7 +64,31 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				}
 				out = append(out, fnd)
 			}
+
+			// Entropy pass: catch secret-like values no typed rule matched.
+			if opts.Entropy {
+				for _, m := range reAssign.FindAllStringSubmatch(line, -1) {
+					v := m[2]
+					if !isLikelySecret(v) {
+						continue
+					}
+					out = append(out, finding.Finding{
+						Kind:     finding.KindSecret,
+						RuleID:   genericRuleID,
+						Title:    "High-entropy secret-like value",
+						File:     f.Path,
+						Line:     lineNo + 1,
+						Match:    finding.Redact(v),
+						Severity: finding.SevMedium,
+						Fix:      secretFix(genericRuleID),
+						Context:  finding.Context{Note: "matched by entropy heuristic — unverified; baseline it if it's a false positive"},
+					})
+				}
+			}
 		}
 	}
 	return out, nil
 }
+
+// genericRuleID marks findings from the entropy heuristic rather than a typed rule.
+const genericRuleID = "generic-high-entropy"

@@ -33,11 +33,21 @@ andas scan . --json           # machine-readable output
 andas scan . --offline        # no network calls at all
 ```
 
+### Adopting on a repo that already has debt
+
+```sh
+andas scan . --baseline andas-baseline.json --update-baseline  # accept today's state
+andas scan . --baseline andas-baseline.json                    # now only NEW risk fails CI
+```
+
 ### Flags
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--history` | off | Also scan the full git history for secrets removed from HEAD. |
+| `--baseline <path>` | — | Suppress findings recorded in this baseline file. |
+| `--update-baseline` | off | Accept all current findings into `--baseline`, then exit. |
+| `--no-entropy` | off | Disable entropy-based detection of unknown/custom secrets. |
 | `--html <path>` | — | Write a self-contained HTML report. |
 | `--sarif <path>` | — | Write a SARIF 2.1.0 report for CI / code scanning. |
 | `--no-validate` | off | Skip live validation of secrets. |
@@ -72,6 +82,11 @@ Validators today: GitHub, GitLab, Slack, Stripe, npm, SendGrid, Telegram, and
 **AWS** (which pairs a detected `AKIA…` access key ID with a nearby secret and
 proves the pair with a signed, read-only STS `GetCallerIdentity` call).
 Detection-only (no validator yet): Google, OpenAI, private-key blocks.
+
+Beyond these known shapes, an **entropy heuristic** catches custom/internal
+secrets: a high-randomness value assigned to a secret-looking name (`*token*`,
+`*apiKey*`, `*password*`, …). These are unverifiable, so they report as MEDIUM —
+and if one is a false positive, `--baseline` silences it for good.
 
 ## Dependency scanning with reachability (JS/TS)
 
@@ -123,7 +138,8 @@ A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-w
 
 ## Status
 
-`v0.4.0` — three scanners on one real-risk core:
+`v0.5.0` — three scanners on one real-risk core, plus entropy detection of
+unknown secrets and a baseline workflow for adopting on repos with existing debt:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|

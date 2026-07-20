@@ -47,7 +47,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	}
 	uniq := map[string]*agg{}
 	for _, b := range blobs {
-		for _, m := range secrets.Detect(b.Content) {
+		for _, m := range secrets.Detect(b.Content, opts.Entropy) {
 			if _, seen := uniq[m.Secret]; !seen {
 				uniq[m.Secret] = &agg{match: m, blobSHA: b.SHA, context: string(b.Content)}
 			}

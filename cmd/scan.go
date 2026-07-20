@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/malandas/andas/internal/finding"
 	"github.com/malandas/andas/internal/report"
@@ -21,6 +22,9 @@ func runScan(args []string) int {
 		noValidate = fs.Bool("no-validate", false, "skip live validation of secrets")
 		offline    = fs.Bool("offline", false, "make no network calls at all (no secret validation, no OSV vuln lookup)")
 		history    = fs.Bool("history", false, "also scan the full git history for secrets removed from HEAD")
+		noEntropy  = fs.Bool("no-entropy", false, "disable entropy-based detection of unknown/custom secrets")
+		baseline   = fs.String("baseline", "", "suppress findings listed in this baseline file")
+		updateBase = fs.Bool("update-baseline", false, "write all current findings to --baseline as accepted, then exit")
 		asJSON     = fs.Bool("json", false, "emit JSON instead of the table")
 		htmlOut    = fs.String("html", "", "write a self-contained HTML report to this path")
 		sarifOut   = fs.String("sarif", "", "write a SARIF 2.1.0 report to this path (for CI/code scanning)")
@@ -64,6 +68,7 @@ func runScan(args []string) int {
 	opts := scanner.Options{
 		Validate: !*noValidate && !*offline,
 		Offline:  *offline,
+		Entropy:  !*noEntropy,
 		TimeoutS: *timeout,
 	}
 
@@ -83,6 +88,35 @@ func runScan(args []string) int {
 			return 1
 		}
 		all = append(all, found...)
+	}
+
+	// --update-baseline: accept the current state and stop, so future scans
+	// report only what appears afterwards.
+	if *updateBase {
+		if *baseline == "" {
+			fmt.Fprintln(os.Stderr, "andas: --update-baseline requires --baseline <file>")
+			return 2
+		}
+		if err := report.WriteBaseline(*baseline, all, time.Now()); err != nil {
+			fmt.Fprintf(os.Stderr, "andas: writing baseline: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "andas: baseline written to %s (%d findings accepted)\n", *baseline, len(all))
+		return 0
+	}
+
+	// --baseline: drop previously-accepted findings before reporting or gating.
+	if *baseline != "" {
+		b, err := report.LoadBaseline(*baseline)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "andas: reading baseline: %v\n", err)
+			return 1
+		}
+		var suppressed int
+		all, suppressed = b.Filter(all)
+		if suppressed > 0 {
+			fmt.Fprintf(os.Stderr, "andas: %d finding(s) suppressed by baseline\n", suppressed)
+		}
 	}
 
 	if *asJSON {

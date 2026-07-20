@@ -14,8 +14,10 @@ type RawMatch struct {
 	Severity  finding.Severity
 }
 
-// Detect runs every secret rule over content and returns the raw matches.
-func Detect(content []byte) []RawMatch {
+// Detect runs every secret rule over content and returns the raw matches. When
+// entropy is true it also includes high-entropy secret-like values that no
+// typed rule matched.
+func Detect(content []byte, entropy bool) []RawMatch {
 	text := string(content)
 	var out []RawMatch
 	for _, rule := range rules {
@@ -26,6 +28,16 @@ func Detect(content []byte) []RawMatch {
 				Secret:    m,
 				Validator: rule.Validator,
 				Severity:  rule.Severity,
+			})
+		}
+	}
+	if entropy {
+		for _, v := range entropyValues(text) {
+			out = append(out, RawMatch{
+				RuleID:   genericRuleID,
+				Title:    "High-entropy secret-like value",
+				Secret:   v,
+				Severity: finding.SevMedium,
 			})
 		}
 	}
