@@ -26,9 +26,9 @@ type ecosystem struct {
 var ecosystems = []ecosystem{
 	{"Python", "requirements.txt", parseRequirements, pythonReach},
 	{"Go", "go.mod", parseGoMod, goReach},
-	{"Ruby", "Gemfile.lock", parseGemfileLock, nil},
-	{"Rust", "Cargo.lock", parseCargoLock, nil},
-	{"PHP", "composer.lock", parseComposerLock, nil},
+	{"Ruby", "Gemfile.lock", parseGemfileLock, rubyReach},
+	{"Rust", "Cargo.lock", parseCargoLock, rustReach},
+	{"PHP", "composer.lock", parseComposerLock, phpReach},
 }
 
 // findManifest returns the shallowest manifest of the given name under root.

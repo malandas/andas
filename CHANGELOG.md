@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.3.0
+- Import-level reachability completed for all six ecosystems: added Ruby, Rust,
+  and PHP. Rust maps Cargo hyphens to `use` underscores; PHP reads PSR-4
+  namespaces from composer.lock and matches `use` statements; Ruby treats all
+  gems as reachable when it detects Bundler.require (auto-loads everything), so
+  a used gem is never falsely demoted.
+
 ## v1.2.0
 - Import-level reachability extended to Python and Go: a vulnerability in a
   package your source never imports is demoted, as it already was for npm.

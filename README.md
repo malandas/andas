@@ -177,15 +177,18 @@ package against [OSV.dev](https://osv.dev):
 | JavaScript / TypeScript | `package.json` + `package-lock.json` / `yarn.lock` | ✅ import-level + used symbols |
 | Python | `requirements.txt` (pinned) | ✅ import-level |
 | Go | `go.mod` | ✅ import-level |
-| Ruby | `Gemfile.lock` | — ranked by severity |
-| Rust | `Cargo.lock` | — ranked by severity |
-| PHP | `composer.lock` | — ranked by severity |
+| Ruby | `Gemfile.lock` | ✅ import-level |
+| Rust | `Cargo.lock` | ✅ import-level |
+| PHP | `composer.lock` | ✅ import-level |
 
-For JS/TS, Python, and Go, andas parses your source and **demotes a
-vulnerability in any package your code never imports** — the same real-risk
-filter, three languages. (Python resolves distribution→module aliases like
-`PyYAML`→`yaml`; Go matches a module or any subpackage of it.) Ruby, Rust, and
-PHP get findings ranked by real severity for now.
+**All six ecosystems** now get the same real-risk filter: andas parses your
+source and **demotes a vulnerability in any package your code never imports**.
+Each language's import mechanism is handled honestly — Python resolves
+distribution→module aliases (`PyYAML`→`yaml`); Go matches a module or any of its
+subpackages; Rust maps Cargo hyphens to `use` underscores; PHP reads each
+package's PSR-4 namespace from `composer.lock` and matches `use` statements; Ruby
+falls back to treating **all** gems as reachable when it sees `Bundler.require`
+(which auto-loads everything), so a used gem is never wrongly cleared.
 
 ## Reachability, in depth (JS/TS)
 
@@ -256,9 +259,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v1.2.0` — **multi-language dependency scanning with reachability for JS/TS,
-Python, and Go** (plus Ruby, Rust,
-PHP) and **12 live secret validators**, on one real-risk core with blast-radius
+`v1.3.0` — **multi-language dependency scanning with import-level reachability across all six ecosystems** (JS/TS, Python, Go, Ruby, Rust, PHP) and **12 live secret validators**, on one real-risk core with blast-radius
 scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
 a pre-commit guard, four report formats, and a 48-test suite. Strictly
 read-only:
