@@ -172,6 +172,25 @@ func scanNpm(root, pkgJSONPath string, opts scanner.Options) ([]finding.Finding,
 	return out, nil
 }
 
+// ResolveComponents returns every dependency andas can resolve across all
+// ecosystems, without querying OSV. It's the raw material for an SBOM.
+func ResolveComponents(root string, ignore []string) []pkgRef {
+	var refs []pkgRef
+	if pkgJSONPath := findPackageJSON(root); pkgJSONPath != "" {
+		if g, _, err := loadGraph(pkgJSONPath, filepath.Dir(pkgJSONPath)); err == nil {
+			for name, p := range g.byName {
+				refs = append(refs, pkgRef{Name: name, Version: p.Version, Ecosystem: "npm"})
+			}
+		}
+	}
+	for _, eco := range ecosystems {
+		if m := findManifest(root, eco.manifest); m != "" {
+			refs = append(refs, eco.parse(m)...)
+		}
+	}
+	return refs
+}
+
 // hasAnyManifest reports whether the tree holds any dependency manifest at all,
 // so offline mode only prints its note when there was something to scan.
 func hasAnyManifest(root string) bool {

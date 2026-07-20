@@ -82,6 +82,7 @@ or a `#` comment. Matching files are skipped by the working-tree scanners.
 | `--html <path>` | — | Write a self-contained HTML report. |
 | `--sarif <path>` | — | Write a SARIF 2.1.0 report for CI / code scanning. |
 | `--markdown <path>` | — | Write a PR-comment-style Markdown report. |
+| `--sbom <path>` | — | Write a CycloneDX SBOM of all resolved dependencies. |
 | `--no-validate` | off | Skip live validation of secrets. |
 | `--offline` | off | Make no network calls at all (no validation, no OSV lookup). |
 | `--json` | off | Emit JSON instead of the table. |
@@ -267,6 +268,14 @@ raises a finding's confidence, never lowers it.
 - Every finding carries a concrete **fix** line (rotation link, upgrade target).
 
 A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
+
+## SBOM (Software Bill of Materials)
+
+`andas scan . --sbom bom.json` writes a **CycloneDX 1.5** SBOM of every
+dependency it resolves across all six ecosystems — with correct package URLs
+(`pkg:npm/lodash@4.17.11`, `pkg:pypi/Django@2.2.0`, `pkg:golang/…`, …). Since
+andas already resolves the full graph to scan it, the SBOM is the same data in
+the standard format vendors, dashboards, and regulators expect.
 
 ## Configuration
 

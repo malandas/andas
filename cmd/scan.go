@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/malandas/andas/internal/config"
+	"github.com/malandas/andas/internal/osv"
+	"github.com/malandas/andas/internal/sbom"
 
 	"github.com/malandas/andas/internal/finding"
 	"github.com/malandas/andas/internal/report"
@@ -34,6 +36,7 @@ func runScan(args []string) int {
 		htmlOut    = fs.String("html", "", "write a self-contained HTML report to this path")
 		sarifOut   = fs.String("sarif", "", "write a SARIF 2.1.0 report to this path (for CI/code scanning)")
 		mdOut      = fs.String("markdown", "", "write a PR-comment-style Markdown report to this path")
+		sbomOut    = fs.String("sbom", "", "write a CycloneDX SBOM of all dependencies to this path")
 		noColor    = fs.Bool("no-color", false, "disable coloured output")
 		timeout    = fs.Int("timeout", 15, "per-request network timeout, seconds")
 		failOn     = fs.String("fail-on", "high", "exit non-zero if real risk reaches this level (info|low|medium|high|critical)")
@@ -164,6 +167,15 @@ func runScan(args []string) int {
 		}
 		fmt.Fprintf(os.Stderr, "andas: Markdown report written to %s\n", *mdOut)
 	}
+	if *sbomOut != "" {
+		comps := toComponents(deps.ResolveComponents(root, opts.IgnorePaths))
+		ts := time.Now().UTC().Format(time.RFC3339)
+		if err := writeFile(*sbomOut, func(w io.Writer) error { return sbom.Write(w, comps, ts) }); err != nil {
+			fmt.Fprintf(os.Stderr, "andas: writing SBOM: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "andas: CycloneDX SBOM (%d components) written to %s\n", len(comps), *sbomOut)
+	}
 
 	// The .andas.yml fail-on applies only when the flag was left at its default.
 	failLevel := *failOn
@@ -221,6 +233,15 @@ func filterDisabled(all []finding.Finding, cfg *config.Config) []finding.Finding
 		}
 	}
 	return kept
+}
+
+// toComponents adapts resolved deps refs into SBOM components.
+func toComponents(refs []osv.Ref) []sbom.Component {
+	out := make([]sbom.Component, len(refs))
+	for i, r := range refs {
+		out[i] = sbom.Component{Name: r.Name, Version: r.Version, Ecosystem: r.Ecosystem}
+	}
+	return out
 }
 
 // writeFile creates path and hands the writer to render.

@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.10.0
+- SBOM generation: `andas scan . --sbom bom.json` writes a CycloneDX 1.5
+  Software Bill of Materials of every resolved dependency across all six
+  ecosystems, with correct package URLs (purls). Reuses the graph andas already
+  builds to scan.
+
 ## v1.9.0
 - Scanners now run concurrently — on a large repo the scan takes about as long
   as its slowest single scanner instead of the sum. OSV detail lookups are
