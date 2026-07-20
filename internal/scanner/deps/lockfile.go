@@ -3,6 +3,7 @@ package deps
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -37,27 +38,34 @@ type lockJSON struct {
 	} `json:"packages"`
 }
 
-// loadGraph reads package.json (required) and package-lock.json (optional) from
-// dir and builds the resolved dependency graph. Without a lockfile it falls
-// back to the direct dependencies only, with versions stripped of range
-// prefixes — enough to query OSV, but without transitive edges.
-func loadGraph(pkgJSONPath, lockPath string) (*graph, error) {
+// loadGraph reads package.json (required) plus whichever lockfile is present in
+// projDir (package-lock.json preferred, then yarn.lock) and builds the resolved
+// dependency graph. Without a lockfile it falls back to the direct dependencies
+// only, with versions stripped of range prefixes — enough to query OSV, but
+// without transitive edges. lockKind reports which source was used.
+func loadGraph(pkgJSONPath, projDir string) (g *graph, lockKind string, err error) {
 	raw, err := os.ReadFile(pkgJSONPath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var pj packageJSON
 	if err := json.Unmarshal(raw, &pj); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	g := &graph{byName: map[string]*pkg{}, direct: map[string]bool{}}
+	g = &graph{byName: map[string]*pkg{}, direct: map[string]bool{}}
+	devSet := map[string]bool{}
 	for name := range pj.Dependencies {
 		g.direct[name] = true
 	}
+	for name := range pj.DevDependencies {
+		if !g.direct[name] {
+			devSet[name] = true
+		}
+	}
 
-	// Prefer the lockfile: it has exact versions and the full graph.
-	if lockRaw, err := os.ReadFile(lockPath); err == nil {
+	// Prefer npm's lockfile: it carries versions, edges, and a dev flag.
+	if lockRaw, err := os.ReadFile(filepath.Join(projDir, "package-lock.json")); err == nil {
 		var lf lockJSON
 		if json.Unmarshal(lockRaw, &lf) == nil && len(lf.Packages) > 0 {
 			for key, p := range lf.Packages {
@@ -73,7 +81,19 @@ func loadGraph(pkgJSONPath, lockPath string) (*graph, error) {
 				// known v1 simplification we accept for now.
 				g.byName[name] = &pkg{Name: name, Version: p.Version, Dev: p.Dev, Deps: deps}
 			}
-			return g, nil
+			return g, "package-lock.json", nil
+		}
+	}
+
+	// Otherwise yarn.lock. It has versions and edges but no dev flag, so we
+	// mark packages dev from package.json's devDependencies.
+	if yarnRaw, err := os.ReadFile(filepath.Join(projDir, "yarn.lock")); err == nil {
+		if pkgs := parseYarnLock(yarnRaw); len(pkgs) > 0 {
+			for name, p := range pkgs {
+				p.Dev = devSet[name]
+				g.byName[name] = p
+			}
+			return g, "yarn.lock", nil
 		}
 	}
 
@@ -86,7 +106,7 @@ func loadGraph(pkgJSONPath, lockPath string) (*graph, error) {
 			g.byName[name] = &pkg{Name: name, Version: cleanVersion(ver), Dev: true}
 		}
 	}
-	return g, nil
+	return g, "package.json (no lockfile)", nil
 }
 
 // packageName extracts the package name from a lockfile key like

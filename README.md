@@ -69,8 +69,9 @@ yet): AWS, Google, OpenAI, private-key blocks.
 
 For a project with a `package.json`, `andas` also:
 
-1. Reads `package.json` + `package-lock.json` to resolve the full dependency
-   tree with exact versions.
+1. Reads `package.json` plus a lockfile — `package-lock.json` (npm) or
+   `yarn.lock` (Yarn v1) — to resolve the full dependency tree with exact
+   versions. With no lockfile it falls back to direct dependencies only.
 2. Queries [OSV.dev](https://osv.dev) (free, no API key) for known
    vulnerabilities in each package.
 3. Parses your `.js/.jsx/.ts/.tsx` source to see which packages you actually
@@ -84,5 +85,6 @@ step.
 
 ## Status
 
-`v0.2.0` — secret scanning with live validation **+** npm dependency scanning
-with import-level reachability. Both share one real-risk core and one report.
+`v0.2.1` — secret scanning with live validation **+** npm/Yarn dependency
+scanning with import-level reachability. Both share one real-risk core and one
+report.

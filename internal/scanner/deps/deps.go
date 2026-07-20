@@ -26,11 +26,13 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		return nil, nil // not a JS/TS project; nothing to do
 	}
 	projDir := filepath.Dir(pkgJSONPath)
-	lockPath := filepath.Join(projDir, "package-lock.json")
 
-	g, err := loadGraph(pkgJSONPath, lockPath)
+	g, lockKind, err := loadGraph(pkgJSONPath, projDir)
 	if err != nil {
 		return nil, err
+	}
+	if lockKind == "package.json (no lockfile)" {
+		fmt.Fprintln(os.Stderr, "andas: no lockfile found — scanning direct dependencies only (no transitive graph)")
 	}
 	if len(g.byName) == 0 {
 		return nil, nil
