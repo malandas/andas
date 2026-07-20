@@ -175,15 +175,17 @@ package against [OSV.dev](https://osv.dev):
 | Language | Manifest | Reachability |
 |----------|----------|--------------|
 | JavaScript / TypeScript | `package.json` + `package-lock.json` / `yarn.lock` | ✅ import-level + used symbols |
-| Python | `requirements.txt` (pinned) | — ranked by severity |
-| Go | `go.mod` | — ranked by severity |
+| Python | `requirements.txt` (pinned) | ✅ import-level |
+| Go | `go.mod` | ✅ import-level |
 | Ruby | `Gemfile.lock` | — ranked by severity |
 | Rust | `Cargo.lock` | — ranked by severity |
 | PHP | `composer.lock` | — ranked by severity |
 
-JS/TS gets the full reachability treatment below; the others get
-vulnerability findings ranked by real severity (reachability for those
-ecosystems is on the roadmap).
+For JS/TS, Python, and Go, andas parses your source and **demotes a
+vulnerability in any package your code never imports** — the same real-risk
+filter, three languages. (Python resolves distribution→module aliases like
+`PyYAML`→`yaml`; Go matches a module or any subpackage of it.) Ruby, Rust, and
+PHP get findings ranked by real severity for now.
 
 ## Reachability, in depth (JS/TS)
 
@@ -254,7 +256,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v1.1.0` — **multi-language dependency scanning** (JS/TS, Python, Go, Ruby, Rust,
+`v1.2.0` — **multi-language dependency scanning with reachability for JS/TS,
+Python, and Go** (plus Ruby, Rust,
 PHP) and **12 live secret validators**, on one real-risk core with blast-radius
 scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
 a pre-commit guard, four report formats, and a 48-test suite. Strictly

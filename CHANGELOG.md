@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.2.0
+- Import-level reachability extended to Python and Go: a vulnerability in a
+  package your source never imports is demoted, as it already was for npm.
+  Python resolves distribution→module aliases (PyYAML→yaml, …); Go matches a
+  module or any of its subpackages.
+
 ## v1.1.0
 - Multi-language dependency scanning: Python (requirements.txt), Go (go.mod),
   Ruby (Gemfile.lock), Rust (Cargo.lock), PHP (composer.lock) — all via OSV.dev,

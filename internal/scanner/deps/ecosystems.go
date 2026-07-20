@@ -18,14 +18,17 @@ type ecosystem struct {
 	name     string // human label, e.g. "Python"
 	manifest string // file to look for, e.g. "requirements.txt"
 	parse    func(path string) []pkgRef
+	// reach optionally returns which of refs your source actually imports; nil
+	// means reachability isn't analysed for this ecosystem yet.
+	reach func(root string, ignore []string, refs []pkgRef) map[string]bool
 }
 
 var ecosystems = []ecosystem{
-	{"Python", "requirements.txt", parseRequirements},
-	{"Go", "go.mod", parseGoMod},
-	{"Ruby", "Gemfile.lock", parseGemfileLock},
-	{"Rust", "Cargo.lock", parseCargoLock},
-	{"PHP", "composer.lock", parseComposerLock},
+	{"Python", "requirements.txt", parseRequirements, pythonReach},
+	{"Go", "go.mod", parseGoMod, goReach},
+	{"Ruby", "Gemfile.lock", parseGemfileLock, nil},
+	{"Rust", "Cargo.lock", parseCargoLock, nil},
+	{"PHP", "composer.lock", parseComposerLock, nil},
 }
 
 // findManifest returns the shallowest manifest of the given name under root.

@@ -58,9 +58,23 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		for _, r := range refs {
 			versionOf[r.Name] = r.Version
 		}
+		// Reachability, where this ecosystem supports it: a vulnerable package
+		// your source never imports is demoted, exactly as for npm.
+		var reachable map[string]bool
+		if eco.reach != nil {
+			reachable = eco.reach(root, opts.IgnorePaths, refs)
+		}
 		for name, advs := range advisories {
+			ctx := finding.Context{}
+			if eco.reach != nil {
+				r := reachable[name]
+				ctx.Reachable = &r
+				ctx.Note = ecoReachNote(eco.name, r)
+			} else {
+				ctx.Note = eco.name + " dependency — reachability analysis not yet available for this ecosystem"
+			}
 			for _, a := range advs {
-				out = append(out, finding.Finding{
+				f := finding.Finding{
 					Kind:     finding.KindVuln,
 					RuleID:   a.ID,
 					Title:    vulnTitle(name, a),
@@ -68,8 +82,9 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					Match:    fmt.Sprintf("%s@%s", name, versionOf[name]),
 					Severity: a.Severity,
 					Fix:      fmt.Sprintf("Upgrade %s past %s to a patched release; see https://osv.dev/vulnerability/%s", name, versionOf[name], a.ID),
-					Context:  finding.Context{Note: eco.name + " dependency — reachability analysis not yet available for this ecosystem"},
-				})
+					Context:  ctx,
+				}
+				out = append(out, f)
 			}
 		}
 	}
@@ -200,4 +215,12 @@ func reachabilityNote(p *pkg, reachable bool) string {
 		return "dev dependency, not imported by app code — not shipped"
 	}
 	return "not imported anywhere in your source — transitive/unused"
+}
+
+// ecoReachNote is the reachability note for non-npm ecosystems.
+func ecoReachNote(eco string, reachable bool) string {
+	if reachable {
+		return "imported by your " + eco + " code — reachable"
+	}
+	return "not imported anywhere in your " + eco + " source — unused/transitive"
 }
