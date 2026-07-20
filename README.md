@@ -7,8 +7,9 @@ don't: **is this risk actually real for *your* project, or is it noise?**
 
 - A detected secret is only an emergency if it's **still live**. `andas` asks the
   provider — safely, read-only — and demotes dead credentials out of your way.
-- (Roadmap) A CVE in a dependency only matters if the vulnerable code is
-  **reachable** from your app. `andas` will trace that too.
+- A CVE in an npm dependency only matters if that package is **reachable** from
+  your app's own code. `andas` traces your imports and demotes vulnerabilities
+  in packages nothing imports, and in dev dependencies that never ship.
 
 One command. One dependency-free binary. Linux, macOS, Windows.
 
@@ -33,7 +34,8 @@ andas scan . --no-validate   # offline: detect only, no network calls
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--no-validate` | off | Detect only; make no network calls. |
+| `--no-validate` | off | Skip live validation of secrets. |
+| `--offline` | off | Make no network calls at all (no validation, no OSV lookup). |
 | `--json` | off | Emit JSON instead of the table. |
 | `--no-color` | off | Disable coloured output. |
 | `--timeout` | `8` | Per-validation network timeout (seconds). |
@@ -63,7 +65,24 @@ offline scan.
 Validators today: GitHub, GitLab, Slack, Stripe. Detection-only (no validator
 yet): AWS, Google, OpenAI, private-key blocks.
 
+## Dependency scanning with reachability (JS/TS)
+
+For a project with a `package.json`, `andas` also:
+
+1. Reads `package.json` + `package-lock.json` to resolve the full dependency
+   tree with exact versions.
+2. Queries [OSV.dev](https://osv.dev) (free, no API key) for known
+   vulnerabilities in each package.
+3. Parses your `.js/.jsx/.ts/.tsx` source to see which packages you actually
+   import, then walks the graph to compute what's **reachable**. A vulnerable
+   package outside that set — an unused transitive dep, or a dev-only tool that
+   never ships in your React Native bundle — is demoted to `LOW`.
+
+Reachability today is at the **import level** (is the package reached at all).
+Function-level reachability (is the specific vulnerable API called) is the next
+step.
+
 ## Status
 
-`v0.1.0` — secret scanning + live validation. Next up: dependency-vulnerability
-scanning with **reachability analysis**, sharing this same real-risk core.
+`v0.2.0` — secret scanning with live validation **+** npm dependency scanning
+with import-level reachability. Both share one real-risk core and one report.

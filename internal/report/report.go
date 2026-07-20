@@ -85,12 +85,17 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 	for _, r := range rows {
 		f := r.f
 		sev := color(sevColor(r.risk), fmt.Sprintf("%-8s", r.risk.String()), useColor)
-		loc := color(cDim, fmt.Sprintf("%s:%d", f.File, f.Line), useColor)
+		locStr := f.File
+		if f.Line > 0 {
+			locStr = fmt.Sprintf("%s:%d", f.File, f.Line)
+		}
+		loc := color(cDim, locStr, useColor)
 		fmt.Fprintf(w, "  %s %s\n", sev, color(cBold, f.Title, useColor))
 		fmt.Fprintf(w, "           %s  %s\n", loc, color(cGray, f.Match, useColor))
 
 		// Show the context line — this is *why* the risk was up- or downgraded.
-		if f.Kind == finding.KindSecret {
+		switch f.Kind {
+		case finding.KindSecret:
 			switch {
 			case f.Context.Validated && f.Context.Live:
 				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ VERIFIED LIVE — rotate this credential now", useColor))
@@ -98,6 +103,12 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ verified dead — demoted out of the noise", useColor))
 			case f.Context.Note != "":
 				fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
+			}
+		case finding.KindVuln:
+			if f.Context.Reachable != nil && *f.Context.Reachable {
+				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ "+f.Context.Note, useColor))
+			} else {
+				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ "+f.Context.Note+" — demoted", useColor))
 			}
 		}
 		fmt.Fprintln(w)

@@ -23,7 +23,8 @@ type Scanner interface {
 // Options carries run-wide settings down to individual scanners.
 type Options struct {
 	Validate bool // perform live validation of secrets
-	TimeoutS int  // per-validation network timeout, seconds
+	Offline  bool // make no network calls at all (no validation, no OSV)
+	TimeoutS int  // per-request network timeout, seconds
 }
 
 // Directories we never descend into: noise, vendored code, and VCS internals.

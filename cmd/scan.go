@@ -8,6 +8,7 @@ import (
 	"github.com/malandas/andas/internal/finding"
 	"github.com/malandas/andas/internal/report"
 	"github.com/malandas/andas/internal/scanner"
+	"github.com/malandas/andas/internal/scanner/deps"
 	"github.com/malandas/andas/internal/scanner/secrets"
 )
 
@@ -15,10 +16,11 @@ import (
 func runScan(args []string) int {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	var (
-		noValidate = fs.Bool("no-validate", false, "skip live validation of secrets (offline mode)")
+		noValidate = fs.Bool("no-validate", false, "skip live validation of secrets")
+		offline    = fs.Bool("offline", false, "make no network calls at all (no secret validation, no OSV vuln lookup)")
 		asJSON     = fs.Bool("json", false, "emit JSON instead of the table")
 		noColor    = fs.Bool("no-color", false, "disable coloured output")
-		timeout    = fs.Int("timeout", 8, "per-validation network timeout, seconds")
+		timeout    = fs.Int("timeout", 15, "per-request network timeout, seconds")
 		failOn     = fs.String("fail-on", "high", "exit non-zero if real risk reaches this level (info|low|medium|high|critical)")
 	)
 	fs.Usage = func() {
@@ -54,11 +56,15 @@ func runScan(args []string) int {
 		return 2
 	}
 
-	opts := scanner.Options{Validate: !*noValidate, TimeoutS: *timeout}
+	opts := scanner.Options{
+		Validate: !*noValidate && !*offline,
+		Offline:  *offline,
+		TimeoutS: *timeout,
+	}
 
 	scanners := []scanner.Scanner{
 		secrets.New(),
-		// future: reachability.New() for vulnerability findings
+		deps.New(),
 	}
 
 	var all []finding.Finding
