@@ -13,7 +13,7 @@ don't: **is this risk actually real for *your* project, or is it noise?**
   your app's own code. `andas` traces your imports and demotes vulnerabilities
   in packages nothing imports, and in dev dependencies that never ship.
 
-`andas` finds three kinds of real risk: leaked **secrets** (is it still live?), vulnerable **dependencies** (does your code reach it?), and dangerous **code** patterns in your own source (SAST). One dependency-free binary. Linux, macOS, Windows.
+`andas` finds four kinds of real risk: leaked **secrets** (still live?), vulnerable **dependencies** (does your code reach it?), dangerous **code** in your own source (SAST), and insecure **infrastructure config** (Dockerfiles, docker-compose, GitHub Actions). One dependency-free binary. Linux, macOS, Windows.
 
 ## Install
 
@@ -240,6 +240,18 @@ notes whether **user-controlled input appears on the same line** (`req.query`,
 `$_GET`, `request.args`, …) — the cheap signal that a dangerous sink is actually
 reachable by an attacker. Detection is pattern-based, not full taint analysis.
 
+## Infrastructure & CI config (IaC)
+
+`andas` also scans the config files every repo ships with:
+
+- **Dockerfiles** — running as `root`, `:latest` base images, `ADD` from a URL,
+  `curl ... | bash`, `chmod 777`.
+- **docker-compose** — `privileged: true`, the Docker socket mounted into a
+  service, host networking.
+- **GitHub Actions** — script injection via `${{ github.event.* }}` in `run:`,
+  `pull_request_target` (secrets on untrusted PR code), third-party actions
+  pinned to a moving branch instead of a commit SHA.
+
 ## Reports & CI
 
 - `--html <path>` — a self-contained, theme-aware HTML report you can share.
@@ -271,7 +283,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v1.6.0` — **four scanners on one real-risk core: secrets (17 live validators), dependencies (6 ecosystems, reachability + function-level), git history, and SAST of your own code** (JS/TS, Python, Ruby, PHP, Go), on one real-risk core with blast-radius
+`v1.7.0` — **five scanners on one real-risk core: secrets (17 live validators), dependencies (6 ecosystems, reachability + function-level), git history, SAST, and IaC/CI config** (Dockerfile, docker-compose, GitHub Actions), on one real-risk core with blast-radius
 scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
 a pre-commit guard, four report formats, and a 48-test suite. Strictly
 read-only:

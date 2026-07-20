@@ -16,7 +16,8 @@ type Kind string
 const (
 	KindSecret Kind = "secret"
 	KindVuln   Kind = "vulnerability"
-	KindCode   Kind = "code" // a dangerous pattern in the user's own source (SAST)
+	KindCode   Kind = "code"   // a dangerous pattern in the user's own source (SAST)
+	KindConfig Kind = "config" // an insecure infrastructure/CI configuration (IaC)
 )
 
 // Severity is an ordered risk level.

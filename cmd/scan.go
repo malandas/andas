@@ -12,6 +12,7 @@ import (
 	"github.com/malandas/andas/internal/scanner"
 	"github.com/malandas/andas/internal/scanner/deps"
 	"github.com/malandas/andas/internal/scanner/githistory"
+	"github.com/malandas/andas/internal/scanner/iac"
 	"github.com/malandas/andas/internal/scanner/sast"
 	"github.com/malandas/andas/internal/scanner/secrets"
 )
@@ -79,6 +80,7 @@ func runScan(args []string) int {
 		secrets.New(),
 		deps.New(),
 		sast.New(),
+		iac.New(),
 	}
 	if *history {
 		scanners = append(scanners, githistory.New())

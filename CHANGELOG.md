@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.7.0
+- New IaC scanner: flags insecure infrastructure/CI config in the files every
+  repo ships — Dockerfiles (root user, :latest, ADD from URL, curl|bash, chmod
+  777), docker-compose (privileged, docker.sock mount, host network), and
+  GitHub Actions workflows (script injection via github.event.* in run:,
+  pull_request_target, third-party actions pinned to a moving branch).
+
 ## v1.6.0
 - New SAST scanner: statically flags dangerous patterns in your own source —
   code injection (eval/new Function/exec), OS command execution, unsafe
