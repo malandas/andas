@@ -1,0 +1,138 @@
+// Package report renders findings for humans and machines. Everything is
+// ordered by RealRisk, because that ordering is the value naqi adds.
+package report
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"sort"
+
+	"github.com/mm-fid/naqi/internal/finding"
+)
+
+// ANSI colours, disabled automatically when NoColor is set.
+const (
+	cReset  = "\033[0m"
+	cBold   = "\033[1m"
+	cDim    = "\033[2m"
+	cRed    = "\033[31m"
+	cYellow = "\033[33m"
+	cBlue   = "\033[34m"
+	cGray   = "\033[90m"
+)
+
+func color(c, s string, on bool) string {
+	if !on {
+		return s
+	}
+	return c + s + cReset
+}
+
+func sevColor(s finding.Severity) string {
+	switch s {
+	case finding.SevCritical, finding.SevHigh:
+		return cRed
+	case finding.SevMedium:
+		return cYellow
+	case finding.SevLow:
+		return cBlue
+	default:
+		return cGray
+	}
+}
+
+// row pairs a finding with its computed real risk so we sort once.
+type row struct {
+	f    finding.Finding
+	risk finding.Severity
+}
+
+func rank(findings []finding.Finding) []row {
+	rows := make([]row, len(findings))
+	for i, f := range findings {
+		rows[i] = row{f: f, risk: f.RealRisk()}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].risk > rows[j].risk // highest real risk first
+	})
+	return rows
+}
+
+// Text writes the human-readable report. useColor toggles ANSI styling.
+func Text(w io.Writer, findings []finding.Finding, useColor bool) {
+	rows := rank(findings)
+
+	var real, noise int
+	for _, r := range rows {
+		if r.risk >= finding.SevMedium {
+			real++
+		} else {
+			noise++
+		}
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, color(cBold, "  naqi — real-risk report", useColor))
+	fmt.Fprintln(w, color(cGray, "  ─────────────────────────", useColor))
+
+	if len(rows) == 0 {
+		fmt.Fprintln(w, color(cGray, "  no findings. clean scan.", useColor))
+		fmt.Fprintln(w)
+		return
+	}
+
+	for _, r := range rows {
+		f := r.f
+		sev := color(sevColor(r.risk), fmt.Sprintf("%-8s", r.risk.String()), useColor)
+		loc := color(cDim, fmt.Sprintf("%s:%d", f.File, f.Line), useColor)
+		fmt.Fprintf(w, "  %s %s\n", sev, color(cBold, f.Title, useColor))
+		fmt.Fprintf(w, "           %s  %s\n", loc, color(cGray, f.Match, useColor))
+
+		// Show the context line — this is *why* the risk was up- or downgraded.
+		if f.Kind == finding.KindSecret {
+			switch {
+			case f.Context.Validated && f.Context.Live:
+				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ VERIFIED LIVE — rotate this credential now", useColor))
+			case f.Context.Validated && !f.Context.Live:
+				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ verified dead — demoted out of the noise", useColor))
+			case f.Context.Note != "":
+				fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	summary := fmt.Sprintf("  %d real risk(s), %d demoted to noise, %d total",
+		real, noise, len(rows))
+	fmt.Fprintln(w, color(cBold, summary, useColor))
+	fmt.Fprintln(w)
+}
+
+// JSON writes the machine-readable report, each finding annotated with its
+// real_risk so CI pipelines can gate on it.
+func JSON(w io.Writer, findings []finding.Finding) error {
+	type out struct {
+		finding.Finding
+		RealRisk string `json:"real_risk"`
+	}
+	rows := rank(findings)
+	items := make([]out, len(rows))
+	for i, r := range rows {
+		items[i] = out{Finding: r.f, RealRisk: r.risk.String()}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(items)
+}
+
+// HighestRisk returns the top real-risk level present, for exit-code logic.
+func HighestRisk(findings []finding.Finding) finding.Severity {
+	max := finding.SevInfo
+	for _, f := range findings {
+		if r := f.RealRisk(); r > max {
+			max = r
+		}
+	}
+	return max
+}
