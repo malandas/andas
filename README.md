@@ -236,9 +236,10 @@ reports only the ones that were **removed but never rotated**.
 ## Static analysis of your own code (SAST)
 
 Beyond secrets and dependencies, `andas` scans your own source for dangerous
-patterns — code injection (`eval`), OS command execution, unsafe deserialization
-(`pickle.loads`, `unserialize`), disabled TLS verification, XSS sinks, and SQL
-built by string interpolation — across JS/TS, Python, Ruby, PHP, and Go, each
+patterns — code injection (`eval`), OS command execution, unsafe deserialization, path
+traversal, SSRF, weak crypto (MD5/SHA1, insecure randomness), XXE, template
+injection (SSTI), open redirect, NoSQL injection, disabled TLS, XSS, and SQL
+injection — 15 CWE classes across JS/TS, Python, Ruby, PHP, and Go, each
 tagged with its CWE. The rules are tight and high-signal, and every finding
 notes whether **user-controlled input reaches it** — either directly on the line
 (`req.query`, `$_GET`, `request.args`, …) or through a variable assigned from

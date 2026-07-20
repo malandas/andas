@@ -78,3 +78,33 @@ func TestSAST_RespectsExtensions(t *testing.T) {
 		t.Error("php rule fired on a .py file")
 	}
 }
+
+func TestSAST_NewVulnClasses(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.py", "open('/d/' + request.args.get('f'))", "py-path-traversal"},
+		{"a.py", "requests.get(request.args.get('u'))", "py-ssrf"},
+		{"a.py", "hashlib.md5(pw)", "weak-hash"},
+		{"a.py", "render_template_string(request.args.get('t'))", "py-ssti"},
+		{"a.py", "etree.parse(f)", "py-xxe"},
+		{"a.js", "const t = Math.random()", "insecure-random"},
+		{"a.js", "axios(req.query.target)", "js-ssrf"},
+		{"a.js", "res.redirect(req.query.next)", "open-redirect"},
+		{"a.js", "db.find(req.body)", "nosql-where"},
+		{"a.php", "include($_GET['p']);", "php-path-traversal"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
+	}
+}
+
+func TestSAST_NewClassesNoFalsePositive(t *testing.T) {
+	// Safe idioms must stay clean.
+	if f := scanSrc(t, "a.py", "hashlib.sha256(x)"); len(f) != 0 {
+		t.Errorf("sha256 should be clean, got %v", f)
+	}
+	if f := scanSrc(t, "a.py", "open('config.txt')"); len(f) != 0 {
+		t.Errorf("constant open() should be clean, got %v", f)
+	}
+}

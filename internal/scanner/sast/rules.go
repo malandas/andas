@@ -116,4 +116,58 @@ var rules = []rule{
 	{"php-sql-var", "Possible SQL injection (variable in query)", finding.SevMedium, "CWE-89", php,
 		regexp.MustCompile(`(?:mysqli_query|->query|->exec)\s*\(\s*["'][^"']*\$`),
 		"Use prepared statements with bound parameters instead of interpolating variables."},
+
+	// --- Path traversal (CWE-22) — reading a file from a variable path ---
+	{"py-path-traversal", "Possible path traversal (file opened from a variable)", finding.SevMedium, "CWE-22", py,
+		regexp.MustCompile(`\b(?:open|send_file)\s*\([^)]*(?:request\.|\+)|os\.path\.join\s*\([^)]*request\.`),
+		"Resolve and validate the path against a fixed base dir; reject '..' components."},
+	{"js-path-traversal", "Possible path traversal (file read from a variable)", finding.SevMedium, "CWE-22", js,
+		regexp.MustCompile(`(?:readFile|readFileSync|sendFile|createReadStream)\s*\([^)]*(?:req\.|\+\s*[A-Za-z_])`),
+		"Normalise the path and confirm it stays within an allowed root before reading."},
+	{"php-path-traversal", "Possible path traversal (file included/opened from input)", finding.SevHigh, "CWE-22", php,
+		regexp.MustCompile(`\b(?:include|require|include_once|require_once|fopen|file_get_contents)\s*\(?\s*\$_(?:GET|POST|REQUEST)`),
+		"Never build a file path from user input; use a fixed allowlist of files."},
+
+	// --- Server-Side Request Forgery (CWE-918) — fetching a user-controlled URL ---
+	{"py-ssrf", "Possible SSRF (request to a variable URL)", finding.SevMedium, "CWE-918", py,
+		regexp.MustCompile(`requests\.(?:get|post|put|delete|head)\s*\(\s*(?:[A-Za-z_]\w*\s*\+|f['"]|request\.)|urllib\.request\.urlopen\s*\(`),
+		"Validate the URL against an allowlist of hosts; block internal/link-local ranges."},
+	{"js-ssrf", "Possible SSRF (request to a variable URL)", finding.SevMedium, "CWE-918", js,
+		regexp.MustCompile(`(?:axios|fetch|http\.get|https\.get|request)\s*\(\s*(?:req\.|[A-Za-z_]\w*\s*\+|` + "`" + `[^` + "`" + `]*\$\{)`),
+		"Allowlist destination hosts and reject requests to internal addresses."},
+
+	// --- Weak cryptography (CWE-327 / CWE-328 / CWE-338) ---
+	{"weak-hash", "Weak hashing algorithm (MD5/SHA1)", finding.SevMedium, "CWE-328",
+		merge(py, js, golang, php, ruby),
+		regexp.MustCompile(`(?i)(?:hashlib\.(?:md5|sha1)|createHash\s*\(\s*['"](?:md5|sha1)|MessageDigest\.getInstance\s*\(\s*"(?:MD5|SHA-?1)|md5\s*\(|Digest::(?:MD5|SHA1))`),
+		"Use SHA-256+ for integrity and bcrypt/scrypt/argon2 for passwords."},
+	{"insecure-random", "Insecure randomness used where security matters", finding.SevMedium, "CWE-338",
+		merge(py, js, golang),
+		regexp.MustCompile(`Math\.random\s*\(\)|random\.random\s*\(\)|math[/]rand`),
+		"Use a CSPRNG (crypto.randomBytes, secrets, crypto/rand) for tokens, keys, or IDs."},
+
+	// --- XXE: XML parsing with external entities (CWE-611) ---
+	{"py-xxe", "XML parsed with an entity-unsafe parser", finding.SevMedium, "CWE-611", py,
+		regexp.MustCompile(`etree\.(?:parse|fromstring)\s*\(|xml\.dom\.minidom\.parse|xml\.sax\.`),
+		"Use defusedxml, or disable external entities/DTDs on the parser."},
+	{"php-xxe", "XML loaded with external entities allowed", finding.SevMedium, "CWE-611", php,
+		regexp.MustCompile(`LIBXML_NOENT|simplexml_load_(?:string|file)\s*\(`),
+		"Do not enable LIBXML_NOENT; keep libxml_disable_entity_loader in effect."},
+
+	// --- Server-Side Template Injection (CWE-1336) ---
+	{"py-ssti", "Possible template injection (template built from input)", finding.SevHigh, "CWE-1336", py,
+		regexp.MustCompile(`(?:render_template_string|Template)\s*\(\s*(?:[A-Za-z_]\w*\s*\+|f['"]|request\.)`),
+		"Render a fixed template with variables as data; never build the template string from input."},
+
+	// --- Open redirect (CWE-601) ---
+	{"open-redirect", "Possible open redirect (redirect to a variable URL)", finding.SevMedium, "CWE-601",
+		merge(py, js, php),
+		regexp.MustCompile(`redirect\s*\(\s*(?:request\.|req\.|\$_(?:GET|POST|REQUEST))|res\.redirect\s*\(\s*req\.`),
+		"Redirect only to a fixed allowlist of paths; never to a raw user-supplied URL."},
+
+	// --- NoSQL injection (CWE-943) ---
+	{"nosql-where", "Possible NoSQL injection ($where / user object in query)", finding.SevMedium, "CWE-943",
+		merge(js, py),
+		regexp.MustCompile(`\$where\s*[:=]|\.find\s*\(\s*(?:req\.body|req\.query|request\.)`),
+		"Never pass raw request objects into a query; validate and cast fields explicitly."},
 }

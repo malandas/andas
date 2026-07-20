@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.13.0
+- SAST coverage expanded from 6 to 15 CWE classes: added path traversal
+  (CWE-22), SSRF (CWE-918), weak crypto — MD5/SHA1 (CWE-328) and insecure
+  randomness (CWE-338), XXE (CWE-611), template injection / SSTI (CWE-1336),
+  open redirect (CWE-601), and NoSQL injection (CWE-943), across JS/TS, Python,
+  Ruby, PHP, and Go. All flow through the same taint tracker.
+
 ## v1.12.0
 - Differential scanning: `andas scan . --since <ref>` reports only findings in
   files changed versus a git ref (branch, HEAD~1, ...), including new untracked
