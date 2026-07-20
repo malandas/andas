@@ -4,12 +4,14 @@ import (
 	"strings"
 )
 
-// parseYarnLock parses a classic (v1) yarn.lock into resolved packages. Yarn's
-// v1 format is a custom, indentation-based syntax: top-level blocks are headed
-// by one or more comma-separated "name@range" descriptors ending in ":", and
-// each block carries a resolved `version` and an optional `dependencies:`
-// sub-block. It carries no dev/prod flag — the caller derives that from
-// package.json — so the returned pkgs have Dev left false.
+// parseYarnLock parses a yarn.lock into resolved packages, handling both the
+// classic v1 format and Yarn Berry (v2+). Both share the same indentation-based
+// block structure: top-level blocks are headed by one or more comma-separated
+// descriptors ending in ":", and each carries a resolved `version` and an
+// optional `dependencies:` sub-block. They differ only in punctuation — classic
+// uses `version "x"` / `dep "range"`, Berry uses `version: x` / `dep: "range"` —
+// which the field parsers below absorb. yarn.lock carries no dev/prod flag, so
+// the caller derives that from package.json; returned pkgs have Dev left false.
 func parseYarnLock(data []byte) map[string]*pkg {
 	out := map[string]*pkg{}
 	lines := strings.Split(string(data), "\n")
@@ -23,6 +25,9 @@ func parseYarnLock(data []byte) map[string]*pkg {
 			return
 		}
 		for _, n := range names {
+			if n == "__metadata" { // Berry's header block, not a package
+				continue
+			}
 			out[n] = &pkg{Name: n, Version: cur.Version, Deps: cur.Deps}
 		}
 	}
@@ -52,7 +57,8 @@ func parseYarnLock(data []byte) map[string]*pkg {
 		indent := len(line) - len(strings.TrimLeft(line, " \t"))
 		switch {
 		case strings.HasPrefix(trimmed, "version"):
-			cur.Version = strings.Trim(strings.TrimSpace(trimmed[len("version"):]), "\" ")
+			// classic: version "4.17.11"  ·  Berry: version: 4.17.11
+			cur.Version = strings.Trim(trimmed[len("version"):], "\": ")
 			inDeps = false
 		case trimmed == "dependencies:" || trimmed == "optionalDependencies:":
 			inDeps = true
@@ -81,8 +87,9 @@ func descriptorName(desc string) string {
 	return desc[:at]
 }
 
-// firstToken returns the first token of a yarn dependency line — the dependency
-// name — handling both `debug "^2.6.9"` and `"@babel/core" "^7.0.0"`.
+// firstToken returns the dependency name from a yarn dependency line, handling
+// classic `debug "^2.6.9"` and `"@babel/core" "^7.0.0"` as well as Berry's
+// colon form `debug: "npm:^2.6.9"` and `"@babel/core": "npm:^7.0.0"`.
 func firstToken(s string) string {
 	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "\"") {
@@ -90,8 +97,9 @@ func firstToken(s string) string {
 			return s[1 : 1+end]
 		}
 	}
-	if i := strings.IndexByte(s, ' '); i >= 0 {
-		return s[:i]
+	tok := s
+	if i := strings.IndexByte(tok, ' '); i >= 0 {
+		tok = tok[:i]
 	}
-	return s
+	return strings.TrimSuffix(tok, ":") // Berry: `debug:` -> `debug`
 }

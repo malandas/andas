@@ -33,6 +33,15 @@ func validate(kind, secret string, timeoutS int) (live bool, note string) {
 	case "stripe":
 		// Stripe uses HTTP basic auth with the key as the username.
 		return checkBasic(client, "https://api.stripe.com/v1/account", secret)
+	case "npm":
+		return checkStatus(client, "GET", "https://registry.npmjs.org/-/whoami",
+			map[string]string{"Authorization": "Bearer " + secret})
+	case "sendgrid":
+		return checkStatus(client, "GET", "https://api.sendgrid.com/v3/scopes",
+			map[string]string{"Authorization": "Bearer " + secret})
+	case "telegram":
+		// getMe only returns the bot's own identity — no side effects.
+		return checkStatus(client, "GET", "https://api.telegram.org/bot"+secret+"/getMe", nil)
 	default:
 		return false, "no validator"
 	}

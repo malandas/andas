@@ -60,7 +60,28 @@ var rules = []Rule{
 		Title:     "AWS Access Key ID",
 		Severity:  finding.SevHigh,
 		Pattern:   regexp.MustCompile(`(?:AKIA|ASIA)[A-Z0-9]{16}`),
-		Validator: "", // needs the paired secret + signing; not yet validated
+		Validator: "aws", // validated by pairing with a nearby secret (see secrets.go)
+	},
+	{
+		ID:        "npm-token",
+		Title:     "npm Access Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`npm_[A-Za-z0-9]{36}`),
+		Validator: "npm",
+	},
+	{
+		ID:        "sendgrid-key",
+		Title:     "SendGrid API Key",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`SG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}`),
+		Validator: "sendgrid",
+	},
+	{
+		ID:        "telegram-bot-token",
+		Title:     "Telegram Bot Token",
+		Severity:  finding.SevMedium,
+		Pattern:   regexp.MustCompile(`\d{8,10}:[A-Za-z0-9_\-]{35}`),
+		Validator: "telegram",
 	},
 	{
 		ID:        "google-api-key",

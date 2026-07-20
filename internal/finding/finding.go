@@ -55,6 +55,12 @@ type Context struct {
 	// Vulnerabilities: reachability evidence (populated by a later module).
 	// nil = not analysed, true = the vulnerable code path is callable.
 	Reachable *bool `json:"reachable,omitempty"`
+
+	// Symbols the app actually uses from a vulnerable package (e.g. the lodash
+	// functions it imports/calls). Evidence for triage — we deliberately do NOT
+	// downgrade on this, since mapping an advisory to exact functions is
+	// unreliable and a false "safe" is worse than a false alarm.
+	Symbols []string `json:"symbols,omitempty"`
 }
 
 // Finding is a single issue surfaced by a scanner.

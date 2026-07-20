@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/malandas/andas/internal/finding"
 )
@@ -107,6 +108,10 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 		case finding.KindVuln:
 			if f.Context.Reachable != nil && *f.Context.Reachable {
 				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ "+f.Context.Note, useColor))
+				if len(f.Context.Symbols) > 0 {
+					used := strings.Join(f.Context.Symbols, ", ")
+					fmt.Fprintf(w, "           %s\n", color(cYellow, "↳ your code uses: "+used, useColor))
+				}
 			} else {
 				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ "+f.Context.Note+" — demoted", useColor))
 			}

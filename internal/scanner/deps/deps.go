@@ -57,6 +57,19 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		return nil, nil
 	}
 
+	// For the vulnerable *reachable* packages, gather which of their exports the
+	// app actually uses — evidence for triage attached to each finding.
+	wanted := map[string]bool{}
+	for name := range advisories {
+		if reached[name] {
+			wanted[name] = true
+		}
+	}
+	symbols, err := usedSymbols(root, wanted)
+	if err != nil {
+		return nil, err
+	}
+
 	var out []finding.Finding
 	for name, advs := range advisories {
 		p := g.byName[name]
@@ -74,6 +87,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				Context: finding.Context{
 					Reachable: &reach,
 					Note:      note,
+					Symbols:   symbols[name],
 				},
 			}
 			out = append(out, f)

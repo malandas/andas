@@ -62,16 +62,18 @@ HTTP status: `2xx` = live, `401/403` = dead. It never writes, and never sends a
 secret anywhere except its legitimate provider. Use `--no-validate` for a fully
 offline scan.
 
-Validators today: GitHub, GitLab, Slack, Stripe. Detection-only (no validator
-yet): AWS, Google, OpenAI, private-key blocks.
+Validators today: GitHub, GitLab, Slack, Stripe, npm, SendGrid, Telegram, and
+**AWS** (which pairs a detected `AKIA…` access key ID with a nearby secret and
+proves the pair with a signed, read-only STS `GetCallerIdentity` call).
+Detection-only (no validator yet): Google, OpenAI, private-key blocks.
 
 ## Dependency scanning with reachability (JS/TS)
 
 For a project with a `package.json`, `andas` also:
 
 1. Reads `package.json` plus a lockfile — `package-lock.json` (npm) or
-   `yarn.lock` (Yarn v1) — to resolve the full dependency tree with exact
-   versions. With no lockfile it falls back to direct dependencies only.
+   `yarn.lock` (Yarn v1 **and** Berry/v2+) — to resolve the full dependency tree
+   with exact versions. With no lockfile it falls back to direct dependencies.
 2. Queries [OSV.dev](https://osv.dev) (free, no API key) for known
    vulnerabilities in each package.
 3. Parses your `.js/.jsx/.ts/.tsx` source to see which packages you actually
@@ -79,12 +81,15 @@ For a project with a `package.json`, `andas` also:
    package outside that set — an unused transitive dep, or a dev-only tool that
    never ships in your React Native bundle — is demoted to `LOW`.
 
-Reachability today is at the **import level** (is the package reached at all).
-Function-level reachability (is the specific vulnerable API called) is the next
-step.
+Reachability is at the **import level** (is the package reached at all). As a
+first step toward function-level reachability, `andas` also reports **which
+exports of a vulnerable package your code actually uses** (`↳ your code uses:
+merge, template`) — evidence for triage. It deliberately does **not** downgrade
+on this signal: mapping an advisory to exact functions is unreliable, and a
+false "safe" is worse than a false alarm.
 
 ## Status
 
-`v0.2.1` — secret scanning with live validation **+** npm/Yarn dependency
-scanning with import-level reachability. Both share one real-risk core and one
-report.
+`v0.3.0` — secret scanning with live validation (8 providers incl. signed AWS)
+**+** npm/Yarn (v1 & Berry) dependency scanning with import-level reachability
+and used-symbol evidence. Both share one real-risk core and one report.

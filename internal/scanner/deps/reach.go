@@ -2,6 +2,7 @@ package deps
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/malandas/andas/internal/scanner"
@@ -64,6 +65,96 @@ func specifierToPackage(spec string) string {
 		return ""
 	}
 	return parts[0]
+}
+
+// Symbol extraction: which exports of a package the app actually touches. This
+// is the first, deliberately conservative step toward function-level
+// reachability — evidence for a human, never an automatic downgrade.
+var (
+	// import { a, b as c } from 'pkg'   — captures the braced names + specifier
+	reNamed = regexp.MustCompile(`import\s+(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]`)
+	// import _ from 'pkg'  ·  import * as _ from 'pkg'  — captures binding + spec
+	reDefault = regexp.MustCompile(`import\s+(?:\*\s+as\s+)?([\w$]+)\s*(?:,\s*\{[^}]*\})?\s*from\s*['"]([^'"]+)['"]`)
+	// const _ = require('pkg')  — captures binding + spec
+	reRequire = regexp.MustCompile(`(?:const|let|var)\s+([\w$]+)\s*=\s*require\(\s*['"]([^'"]+)['"]`)
+	// const { a, b } = require('pkg')  — captures braced names + spec
+	reReqDestr = regexp.MustCompile(`(?:const|let|var)\s+\{([^}]*)\}\s*=\s*require\(\s*['"]([^'"]+)['"]`)
+)
+
+// usedSymbols returns, for each package in `wanted`, the sorted set of exported
+// symbols the app's source appears to use. Named imports are taken directly;
+// for a default/namespace binding it finds `binding.member` accesses across the
+// same file.
+func usedSymbols(root string, wanted map[string]bool) (map[string][]string, error) {
+	files, err := scanner.WalkText(root)
+	if err != nil {
+		return nil, err
+	}
+	acc := map[string]map[string]bool{} // pkg -> set of symbols
+
+	add := func(pkgName, sym string) {
+		if !wanted[pkgName] || sym == "" {
+			return
+		}
+		if acc[pkgName] == nil {
+			acc[pkgName] = map[string]bool{}
+		}
+		acc[pkgName][sym] = true
+	}
+
+	for _, f := range files {
+		if !jsFile(f.Path) {
+			continue
+		}
+		content := strings.Join(f.Lines, "\n")
+
+		// Named imports / destructured requires → symbols are explicit.
+		for _, re := range []*regexp.Regexp{reNamed, reReqDestr} {
+			for _, m := range re.FindAllStringSubmatch(content, -1) {
+				pkgName := specifierToPackage(m[2])
+				for _, name := range strings.Split(m[1], ",") {
+					add(pkgName, importedName(name))
+				}
+			}
+		}
+
+		// Default/namespace/require bindings → resolve member accesses.
+		bindings := map[string]string{} // localName -> package
+		for _, re := range []*regexp.Regexp{reDefault, reRequire} {
+			for _, m := range re.FindAllStringSubmatch(content, -1) {
+				if pkgName := specifierToPackage(m[2]); wanted[pkgName] {
+					bindings[m[1]] = pkgName
+				}
+			}
+		}
+		for local, pkgName := range bindings {
+			reMember := regexp.MustCompile(`\b` + regexp.QuoteMeta(local) + `\.([\w$]+)`)
+			for _, m := range reMember.FindAllStringSubmatch(content, -1) {
+				add(pkgName, m[1])
+			}
+		}
+	}
+
+	out := map[string][]string{}
+	for pkgName, set := range acc {
+		syms := make([]string, 0, len(set))
+		for s := range set {
+			syms = append(syms, s)
+		}
+		sort.Strings(syms)
+		out[pkgName] = syms
+	}
+	return out, nil
+}
+
+// importedName pulls the source export name from a specifier list entry,
+// dropping any `as alias` and surrounding whitespace. "b as c" -> "b".
+func importedName(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.Index(s, " as "); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }
 
 // reachableSet returns every package reachable in the dependency graph starting
