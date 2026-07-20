@@ -39,6 +39,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					Line:     lineNo + 1,
 					Match:    finding.Redact(m),
 					Severity: rule.Severity,
+					Fix:      secretFix(rule.ID),
 				}
 				switch {
 				case !opts.Validate || rule.Validator == "":

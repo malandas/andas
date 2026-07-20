@@ -24,16 +24,22 @@ go build -o andas .
 ## Usage
 
 ```sh
-andas scan               # scan the current directory
-andas scan ./myproject   # scan a specific path
-andas scan . --json      # machine-readable output for CI
-andas scan . --no-validate   # offline: detect only, no network calls
+andas scan                    # scan the current directory
+andas scan ./myproject        # scan a specific path
+andas scan . --history        # also sweep git history for removed secrets
+andas scan . --html out.html  # write a shareable HTML report
+andas scan . --sarif r.sarif  # SARIF for CI / GitHub code scanning
+andas scan . --json           # machine-readable output
+andas scan . --offline        # no network calls at all
 ```
 
 ### Flags
 
 | Flag | Default | Meaning |
 |------|---------|---------|
+| `--history` | off | Also scan the full git history for secrets removed from HEAD. |
+| `--html <path>` | — | Write a self-contained HTML report. |
+| `--sarif <path>` | — | Write a SARIF 2.1.0 report for CI / code scanning. |
 | `--no-validate` | off | Skip live validation of secrets. |
 | `--offline` | off | Make no network calls at all (no validation, no OSV lookup). |
 | `--json` | off | Emit JSON instead of the table. |
@@ -88,8 +94,41 @@ merge, template`) — evidence for triage. It deliberately does **not** downgrad
 on this signal: mapping an advisory to exact functions is unreliable, and a
 false "safe" is worse than a false alarm.
 
+## Git-history secret scanning (`--history`)
+
+The sharpest edge. A credential deleted from your latest commit still lives in
+git history — and history is public the moment the repo is. With `--history`,
+andas sweeps **every blob across all branches and commits**, and — because it
+validates live — reports the case that actually matters:
+
+```
+CRITICAL  AWS Access Key ID (in git history)
+          git history @ 4f1a9c2 (Sara N., 2025-11-08)   AKIA••••••7Q
+          ▲ removed from HEAD but still recoverable — AWS accepted the key pair — LIVE
+          → fix: Deactivate the key in IAM → Security credentials, then create a fresh pair.
+```
+
+Secrets still in the working tree are left to the normal file scan; `--history`
+reports only the ones that were **removed but never rotated**.
+
+## Reports & CI
+
+- `--html <path>` — a self-contained, theme-aware HTML report you can share.
+- `--sarif <path>` — SARIF 2.1.0; the level of each result is driven by **real
+  risk**, so a dead secret lands as a note and a live one as an error. Upload it
+  with `github/codeql-action/upload-sarif` to populate the Security tab.
+- Every finding carries a concrete **fix** line (rotation link, upgrade target).
+
+A ready-to-use workflow is in [`examples/github-workflow.yml`](examples/github-workflow.yml).
+
 ## Status
 
-`v0.3.0` — secret scanning with live validation (8 providers incl. signed AWS)
-**+** npm/Yarn (v1 & Berry) dependency scanning with import-level reachability
-and used-symbol evidence. Both share one real-risk core and one report.
+`v0.4.0` — three scanners on one real-risk core:
+
+| Scanner | Detects | Context that separates signal from noise |
+|---------|---------|------------------------------------------|
+| **secrets** | 12 credential types | live validation across 8 providers (incl. signed AWS STS) |
+| **deps** | npm/Yarn vulns (v1 & Berry) | import reachability + which vulnerable functions your code calls |
+| **git-history** | secrets removed from HEAD | still-in-history **and** still-live |
+
+Outputs: terminal, JSON, HTML, SARIF — each with remediation.

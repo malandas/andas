@@ -72,6 +72,7 @@ type Finding struct {
 	Line     int      `json:"line"`
 	Match    string   `json:"match"` // already redacted, safe to print
 	Severity Severity `json:"severity"`
+	Fix      string   `json:"fix,omitempty"` // concrete remediation step
 	Context  Context  `json:"context"`
 }
 

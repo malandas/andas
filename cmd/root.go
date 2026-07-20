@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -35,9 +35,12 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `andas — sift real security risk from the noise
 
 usage:
-  andas scan [path]     scan a directory (default: current)
-  andas version         print version
-  andas help            show this help
+  andas scan [path]           scan a directory (default: current)
+  andas scan . --history      also scan git history for removed secrets
+  andas scan . --html r.html  write a shareable HTML report
+  andas scan . --sarif r.sarif write SARIF for CI / code scanning
+  andas version               print version
+  andas help                  show this help
 
-run "andas scan -h" for scan flags`)
+run "andas scan -h" for all scan flags`)
 }

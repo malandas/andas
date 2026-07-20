@@ -18,6 +18,7 @@ const (
 	cBold   = "\033[1m"
 	cDim    = "\033[2m"
 	cRed    = "\033[31m"
+	cGreen  = "\033[32m"
 	cYellow = "\033[33m"
 	cBlue   = "\033[34m"
 	cGray   = "\033[90m"
@@ -115,6 +116,11 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 			} else {
 				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ "+f.Context.Note+" — demoted", useColor))
 			}
+		}
+
+		// Remediation, shown only where it matters — on real risks.
+		if f.Fix != "" && r.risk >= finding.SevMedium {
+			fmt.Fprintf(w, "           %s\n", color(cGreen, "→ fix: "+f.Fix, useColor))
 		}
 		fmt.Fprintln(w)
 	}

@@ -1,0 +1,31 @@
+# Drop this into .github/workflows/andas.yml to gate every PR on REAL risk:
+# live secrets and reachable vulnerabilities fail the build; dead secrets and
+# unreachable CVEs are reported as notes, not blockers.
+name: andas security scan
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  security-events: write   # lets andas upload SARIF to the Security tab
+
+jobs:
+  andas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history — required for --history
+
+      - name: Install andas
+        run: |
+          curl -sSL -o andas https://github.com/malandas/andas/releases/latest/download/andas-linux-amd64
+          chmod +x andas
+
+      - name: Scan
+        run: ./andas scan . --history --sarif andas.sarif --fail-on high
+
+      - name: Upload results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: andas.sarif

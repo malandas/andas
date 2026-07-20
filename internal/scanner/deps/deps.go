@@ -84,6 +84,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				File:     pkgJSONPath,
 				Match:    fmt.Sprintf("%s@%s", name, p.Version),
 				Severity: a.Severity,
+				Fix:      fmt.Sprintf("Upgrade %s past %s to a patched release; see https://osv.dev/vulnerability/%s", name, p.Version, a.ID),
 				Context: finding.Context{
 					Reachable: &reach,
 					Note:      note,
