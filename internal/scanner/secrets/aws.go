@@ -33,8 +33,9 @@ func findAWSSecret(text, accessKeyID string) string {
 }
 
 // awsValidateSTS signs a GetCallerIdentity request with SigV4 and reports
-// whether the credential pair is live. HTTP 200 = live, 403 = invalid/expired.
-func awsValidateSTS(accessKeyID, secretKey string, timeoutS int) (bool, string) {
+// whether the credential pair is live, plus its blast radius: the identity ARN
+// it authenticates as and whether that identity is dangerously privileged.
+func awsValidateSTS(accessKeyID, secretKey string, timeoutS int) Result {
 	if timeoutS <= 0 {
 		timeoutS = 8
 	}
@@ -73,7 +74,7 @@ func awsValidateSTS(accessKeyID, secretKey string, timeoutS int) (bool, string) 
 
 	req, err := http.NewRequest("POST", "https://"+host+"/", strings.NewReader(payload))
 	if err != nil {
-		return false, "request build failed"
+		return Result{Note: "request build failed"}
 	}
 	req.Header.Set("Content-Type", ctype)
 	req.Header.Set("X-Amz-Date", amzDate)
@@ -82,17 +83,23 @@ func awsValidateSTS(accessKeyID, secretKey string, timeoutS int) (bool, string) 
 	client := &http.Client{Timeout: time.Duration(timeoutS) * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, "network error: " + err.Error()
+		return Result{Note: "network error: " + err.Error()}
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	switch resp.StatusCode {
 	case 200:
-		return true, "AWS accepted the key pair (STS GetCallerIdentity) — LIVE"
+		arn := awsArn(body)
+		r := Result{Live: true, Note: "AWS accepted the key pair (STS GetCallerIdentity) — LIVE", Identity: arn, Privileged: awsPrivileged(arn)}
+		if acct := awsAccount(body); acct != "" {
+			r.Scopes = []string{"account " + acct}
+		}
+		return r
 	case 403:
-		return false, "AWS rejected the key pair — invalid, expired, or unpaired"
+		return Result{Note: "AWS rejected the key pair — invalid, expired, or unpaired"}
 	default:
-		return false, "inconclusive AWS response"
+		return Result{Note: "inconclusive AWS response"}
 	}
 }
 

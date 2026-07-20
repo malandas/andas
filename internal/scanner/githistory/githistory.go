@@ -80,10 +80,13 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 
 		base := "removed from HEAD but still recoverable from history"
 		if opts.Validate {
-			validated, live, note := secrets.ValidateMatch(a.match, a.context, opts.TimeoutS)
-			fnd.Context.Validated = validated
-			fnd.Context.Live = live
-			fnd.Context.Note = base + " — " + note
+			validated, res := secrets.ValidateMatch(a.match, a.context, opts.TimeoutS)
+			if validated {
+				res.Note = base + " — " + res.Note
+				secrets.ApplyResult(&fnd.Context, res)
+			} else {
+				fnd.Context.Note = base + " — " + res.Note
+			}
 		} else {
 			fnd.Context.Note = base
 		}

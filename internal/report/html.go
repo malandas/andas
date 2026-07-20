@@ -14,16 +14,19 @@ func HTML(w io.Writer, findings []finding.Finding, target string) error {
 	rows := rank(findings)
 
 	type item struct {
-		Risk      string
-		RiskClass string
-		Title     string
-		Loc       string
-		Match     string
-		Note      string
-		Symbols   string
-		Fix       string
-		Promoted  bool
-		Demoted   bool
+		Risk       string
+		RiskClass  string
+		Title      string
+		Loc        string
+		Match      string
+		Note       string
+		Symbols    string
+		Fix        string
+		Identity   string
+		Access     string
+		Privileged bool
+		Promoted   bool
+		Demoted    bool
 	}
 	var items []item
 	var real, noise int
@@ -51,6 +54,11 @@ func HTML(w io.Writer, findings []finding.Finding, target string) error {
 		}
 		if len(f.Context.Symbols) > 0 {
 			it.Symbols = join(f.Context.Symbols, ", ")
+		}
+		it.Identity = f.Context.Identity
+		it.Privileged = f.Context.Privileged
+		if len(f.Context.Access) > 0 {
+			it.Access = join(f.Context.Access, ", ")
 		}
 		switch f.Kind {
 		case finding.KindSecret:
@@ -108,7 +116,9 @@ var htmlTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   .ctx{margin-top:8px;font-size:13px}
   .ctx .promoted{color:var(--crit);font-weight:600}
   .ctx .demoted{color:var(--dim)}
-  .ctx .sym{color:var(--med)}
+  .ctx.sym{color:var(--med)}
+  .ctx.idn{color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .ctx.priv{color:var(--crit);font-weight:700}
   .fix{margin-top:8px;font-size:13px;color:var(--ok);padding-left:14px;border-left:2px solid var(--ok)}
   .sev-CRITICAL{border-left-color:var(--crit)} .sev-CRITICAL .badge{background:var(--crit);color:#0d1117}
   .sev-HIGH{border-left-color:var(--high)} .sev-HIGH .badge{background:var(--high);color:#0d1117}
@@ -138,6 +148,9 @@ var htmlTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <div class="loc">{{.Loc}}</div>
   <div class="match">{{.Match}}</div>
   {{if .Note}}<div class="ctx"><span class="{{if .Promoted}}promoted{{else if .Demoted}}demoted{{end}}">{{if .Promoted}}▲ {{else if .Demoted}}▼ {{end}}{{.Note}}</span></div>{{end}}
+  {{if .Identity}}<div class="ctx idn">identity: {{.Identity}}</div>{{end}}
+  {{if .Access}}<div class="ctx sym">🔓 can access: {{.Access}}</div>{{end}}
+  {{if .Privileged}}<div class="ctx priv">⚠ HIGH-PRIVILEGE credential — maximum blast radius</div>{{end}}
   {{if .Symbols}}<div class="ctx sym">↳ your code uses: {{.Symbols}}</div>{{end}}
   {{if and .Fix .Promoted}}<div class="fix">→ {{.Fix}}</div>{{end}}
 </div>

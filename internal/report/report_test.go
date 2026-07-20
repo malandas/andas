@@ -2,6 +2,7 @@ package report
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,5 +84,36 @@ func TestMissingBaselineIsEmptyNotError(t *testing.T) {
 	}
 	if _, suppressed := b.Filter([]finding.Finding{{RuleID: "x"}}); suppressed != 0 {
 		t.Errorf("empty baseline suppressed %d, want 0", suppressed)
+	}
+}
+
+func TestRank_PrivilegedLiveSecretsFirst(t *testing.T) {
+	// Two live secrets (both CRITICAL). The high-privilege one must sort first.
+	plain := finding.Finding{Kind: finding.KindSecret, Title: "plain",
+		Context: finding.Context{Validated: true, Live: true, Privileged: false}}
+	admin := finding.Finding{Kind: finding.KindSecret, Title: "admin",
+		Context: finding.Context{Validated: true, Live: true, Privileged: true}}
+
+	rows := rank([]finding.Finding{plain, admin})
+	if rows[0].f.Title != "admin" {
+		t.Errorf("expected the high-privilege secret first, got %q", rows[0].f.Title)
+	}
+}
+
+func TestHTML_RendersBlastRadius(t *testing.T) {
+	f := finding.Finding{
+		Kind: finding.KindSecret, Title: "GitHub PAT", File: "a.js", Line: 1, Match: "ghp_***",
+		Context: finding.Context{Validated: true, Live: true, Identity: "octocat",
+			Access: []string{"repo", "admin:org"}, Privileged: true},
+	}
+	var b strings.Builder
+	if err := HTML(&b, []finding.Finding{f}, "."); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, want := range []string{"octocat", "admin:org", "HIGH-PRIVILEGE"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("HTML report missing %q", want)
+		}
 	}
 }

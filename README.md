@@ -115,6 +115,30 @@ secrets: a high-randomness value assigned to a secret-looking name (`*token*`,
 `*apiKey*`, `*password*`, …). These are unverifiable, so they report as MEDIUM —
 and if one is a false positive, `--baseline` silences it for good.
 
+## Blast radius — how much can a live secret actually do?
+
+A live secret is critical, but a live *admin* secret is a five-alarm fire.
+Because andas is already talking to the provider, it reads back the credential's
+**identity and permissions** and flags the dangerous ones:
+
+```
+CRITICAL  GitHub Personal Access Token
+          src/ci/deploy.js:8   ghp_••••••yz
+          ▲ VERIFIED LIVE — rotate this credential now
+          identity: octocat
+          🔓 can access: repo, admin:org, workflow
+          ⚠ HIGH-PRIVILEGE credential — maximum blast radius
+```
+
+- **GitHub** → OAuth scopes (`repo`, `admin:org`, `delete_repo`, …)
+- **GitLab** → personal-access-token scopes (`api`, `sudo`, …)
+- **SendGrid** → API-key scopes (`mail.send`, admin scopes)
+- **AWS** → the identity ARN and account, root/admin flagged
+- **Stripe / npm** → full-access keys flagged as privileged
+
+High-privilege live secrets sort to the very top of the report — same severity,
+bigger blast radius.
+
 ## Dependency scanning with reachability (JS/TS)
 
 For a project with a `package.json`, `andas` also:
@@ -179,9 +203,9 @@ validation, git plumbing, and file walking are covered by integration runs.
 
 ## Status
 
-`v0.7.0` — three scanners on one real-risk core, entropy detection of unknown
-secrets, a baseline workflow, a git pre-commit guard, `.andasignore` filtering,
-and a unit-test suite over the core logic:
+`v0.8.0` — three scanners on one real-risk core, **blast-radius scoring** for
+live secrets, entropy detection of unknown secrets, a baseline workflow, a git
+pre-commit guard, `.andasignore` filtering, and a unit-test suite:
 
 | Scanner | Detects | Context that separates signal from noise |
 |---------|---------|------------------------------------------|

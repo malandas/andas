@@ -49,18 +49,12 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				case rule.Validator == "aws":
 					// AWS needs the paired secret; look for one in the same file.
 					if secret := findAWSSecret(fileText, m); secret != "" {
-						live, note := awsValidateSTS(m, secret, opts.TimeoutS)
-						fnd.Context.Validated = true
-						fnd.Context.Live = live
-						fnd.Context.Note = note
+						applyResult(&fnd.Context, awsValidateSTS(m, secret, opts.TimeoutS))
 					} else {
 						fnd.Context.Note = "no paired secret key found near it — cannot verify"
 					}
 				default:
-					live, note := validate(rule.Validator, m, opts.TimeoutS)
-					fnd.Context.Validated = true
-					fnd.Context.Live = live
-					fnd.Context.Note = note
+					applyResult(&fnd.Context, validate(rule.Validator, m, opts.TimeoutS))
 				}
 				out = append(out, fnd)
 			}
@@ -92,3 +86,14 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 
 // genericRuleID marks findings from the entropy heuristic rather than a typed rule.
 const genericRuleID = "generic-high-entropy"
+
+// applyResult copies a validation Result (liveness + blast radius) onto a
+// finding's context.
+func applyResult(c *finding.Context, r Result) {
+	c.Validated = true
+	c.Live = r.Live
+	c.Note = r.Note
+	c.Identity = r.Identity
+	c.Access = r.Scopes
+	c.Privileged = r.Privileged
+}

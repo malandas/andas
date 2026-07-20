@@ -52,6 +52,12 @@ type Context struct {
 	Live      bool   `json:"live"`      // is the secret confirmed active?
 	Note      string `json:"note,omitempty"`
 
+	// Secrets: blast radius — what a live credential can actually reach. This is
+	// the difference between "a live token" and "a live admin token".
+	Identity   string   `json:"identity,omitempty"`   // who/what the credential authenticates as
+	Access     []string `json:"access,omitempty"`     // scopes/capabilities it grants
+	Privileged bool     `json:"privileged,omitempty"` // elevated/admin-level access
+
 	// Vulnerabilities: reachability evidence (populated by a later module).
 	// nil = not analysed, true = the vulnerable code path is callable.
 	Reachable *bool `json:"reachable,omitempty"`

@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "0.7.0"
+const version = "0.8.0"
 
 // Execute is the entry point called by main.
 func Execute() int {

@@ -56,7 +56,12 @@ func rank(findings []finding.Finding) []row {
 		rows[i] = row{f: f, risk: f.RealRisk()}
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		return rows[i].risk > rows[j].risk // highest real risk first
+		if rows[i].risk != rows[j].risk {
+			return rows[i].risk > rows[j].risk // highest real risk first
+		}
+		// Within a risk level, a high-privilege live credential outranks the rest
+		// — same severity, far bigger blast radius.
+		return rows[i].f.Context.Privileged && !rows[j].f.Context.Privileged
 	})
 	return rows
 }
@@ -101,6 +106,15 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 			switch {
 			case f.Context.Validated && f.Context.Live:
 				fmt.Fprintf(w, "           %s\n", color(cRed, "▲ VERIFIED LIVE — rotate this credential now", useColor))
+				if f.Context.Identity != "" {
+					fmt.Fprintf(w, "           %s\n", color(cGray, "identity: "+f.Context.Identity, useColor))
+				}
+				if len(f.Context.Access) > 0 {
+					fmt.Fprintf(w, "           %s\n", color(cYellow, "🔓 can access: "+strings.Join(f.Context.Access, ", "), useColor))
+				}
+				if f.Context.Privileged {
+					fmt.Fprintf(w, "           %s\n", color(cRed, "⚠ HIGH-PRIVILEGE credential — maximum blast radius", useColor))
+				}
 			case f.Context.Validated && !f.Context.Live:
 				fmt.Fprintf(w, "           %s\n", color(cGray, "▼ verified dead — demoted out of the noise", useColor))
 			case f.Context.Note != "":

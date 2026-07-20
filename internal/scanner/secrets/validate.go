@@ -2,90 +2,179 @@ package secrets
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// validate performs a safe, read-only call to the credential's own provider to
-// learn whether it is still active. This is the core of andas: a dead secret is
-// noise, a live one is an emergency, and only the provider can tell them apart.
-//
-// Every check here is non-mutating (it reads identity/account info, never
-// writes) and is sent only to the legitimate provider endpoint for that
-// credential type.
-func validate(kind, secret string, timeoutS int) (live bool, note string) {
+// Result is the outcome of validating a secret against its provider. Beyond
+// live/dead, it captures the credential's *blast radius* — who it is and what it
+// can do — because a live read-only token and a live admin token are worlds
+// apart in real risk. This is andas's edge: we already hold the provider on the
+// line, so we ask it what the key can actually reach.
+type Result struct {
+	Live       bool
+	Note       string
+	Identity   string   // who/what the credential is (user, account, ARN, team, bot)
+	Scopes     []string // capabilities/permissions it carries
+	Privileged bool     // elevated/admin-level access — the scary kind
+}
+
+// validate performs a safe, read-only call to the credential's own provider and,
+// when it's live, reads back its identity and permissions. Every request is
+// non-mutating and goes only to that credential type's legitimate endpoint.
+func validate(kind, secret string, timeoutS int) Result {
 	if timeoutS <= 0 {
 		timeoutS = 8
 	}
-	client := &http.Client{Timeout: time.Duration(timeoutS) * time.Second}
+	c := &http.Client{Timeout: time.Duration(timeoutS) * time.Second}
 
 	switch kind {
 	case "github":
-		return checkStatus(client, "GET", "https://api.github.com/user",
-			map[string]string{"Authorization": "token " + secret})
+		return validateGitHub(c, secret)
 	case "gitlab":
-		return checkStatus(client, "GET", "https://gitlab.com/api/v4/user",
-			map[string]string{"PRIVATE-TOKEN": secret})
+		return validateGitLab(c, secret)
 	case "slack":
-		// auth.test accepts the token as a bearer and only reports identity.
-		return checkStatus(client, "POST", "https://slack.com/api/auth.test",
-			map[string]string{"Authorization": "Bearer " + secret})
+		return validateSlack(c, secret)
 	case "stripe":
-		// Stripe uses HTTP basic auth with the key as the username.
-		return checkBasic(client, "https://api.stripe.com/v1/account", secret)
+		return validateStripe(c, secret)
 	case "npm":
-		return checkStatus(client, "GET", "https://registry.npmjs.org/-/whoami",
-			map[string]string{"Authorization": "Bearer " + secret})
+		return validateNpm(c, secret)
 	case "sendgrid":
-		return checkStatus(client, "GET", "https://api.sendgrid.com/v3/scopes",
-			map[string]string{"Authorization": "Bearer " + secret})
+		return validateSendGrid(c, secret)
 	case "telegram":
-		// getMe only returns the bot's own identity — no side effects.
-		return checkStatus(client, "GET", "https://api.telegram.org/bot"+secret+"/getMe", nil)
+		return validateTelegram(c, secret)
 	default:
-		return false, "no validator"
+		return Result{Note: "no validator"}
 	}
 }
 
-// checkStatus sends a request with the given headers and treats a 2xx as proof
-// the credential is live. 401/403 means dead/revoked; anything else is unknown.
-func checkStatus(c *http.Client, method, url string, headers map[string]string) (bool, string) {
+// doReq issues a request and returns the status, headers, and (capped) body.
+func doReq(c *http.Client, method, url string, headers map[string]string) (int, http.Header, []byte, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
-		return false, "request build failed"
+		return 0, nil, nil, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return false, "network error: " + err.Error()
+		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
-	return interpret(resp.StatusCode)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return resp.StatusCode, resp.Header, body, nil
 }
 
-func checkBasic(c *http.Client, url, user string) (bool, string) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return false, "request build failed"
-	}
-	req.SetBasicAuth(user, "")
-	resp, err := c.Do(req)
-	if err != nil {
-		return false, "network error: " + err.Error()
-	}
-	defer resp.Body.Close()
-	return interpret(resp.StatusCode)
-}
-
-func interpret(code int) (bool, string) {
+// deadOrInconclusive maps a non-2xx status to a Result; ok reports 2xx.
+func classify(code int, err error) (r Result, ok bool) {
 	switch {
+	case err != nil:
+		return Result{Note: "network error: " + err.Error()}, false
 	case code >= 200 && code < 300:
-		return true, "provider accepted the credential (HTTP 200) — LIVE"
+		return Result{Live: true, Note: "provider accepted the credential — LIVE"}, true
 	case code == 401 || code == 403:
-		return false, "provider rejected the credential — revoked or dead"
+		return Result{Note: "provider rejected the credential — revoked or dead"}, false
 	default:
-		return false, fmt.Sprintf("inconclusive (HTTP %d)", code)
+		return Result{Note: fmt.Sprintf("inconclusive (HTTP %d)", code)}, false
 	}
+}
+
+func validateGitHub(c *http.Client, secret string) Result {
+	code, hdr, body, err := doReq(c, "GET", "https://api.github.com/user",
+		map[string]string{"Authorization": "token " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "login")
+	r.Scopes = parseScopeHeader(hdr.Get("X-OAuth-Scopes"))
+	r.Privileged = githubPrivileged(r.Scopes)
+	return r
+}
+
+func validateGitLab(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://gitlab.com/api/v4/user",
+		map[string]string{"PRIVATE-TOKEN": secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "username")
+	// A second read-only call surfaces the token's scopes.
+	if _, _, tb, err := doReq(c, "GET", "https://gitlab.com/api/v4/personal_access_tokens/self",
+		map[string]string{"PRIVATE-TOKEN": secret}); err == nil {
+		r.Scopes = jsonStringSlice(tb, "scopes")
+		r.Privileged = containsAny(r.Scopes, "api", "sudo", "write_repository")
+	}
+	return r
+}
+
+func validateSlack(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "POST", "https://slack.com/api/auth.test",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	// Slack returns 200 even for a bad token; the body's "ok" is the real signal.
+	if jsonString(body, "ok") != "true" && !jsonBool(body, "ok") {
+		return Result{Note: "provider rejected the credential — revoked or dead"}
+	}
+	team, user := jsonString(body, "team"), jsonString(body, "user")
+	r.Identity = strings.TrimSpace(team + " / " + user)
+	return r
+}
+
+func validateStripe(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.stripe.com/v1/account",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "id")
+	// sk_live_ is an unrestricted secret key — full account access, incl. charges.
+	r.Scopes = []string{"full account access"}
+	r.Privileged = true
+	return r
+}
+
+func validateNpm(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://registry.npmjs.org/-/whoami",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "username")
+	r.Scopes = []string{"publish as " + r.Identity}
+	r.Privileged = true // a live npm token can publish packages — supply-chain risk
+	return r
+}
+
+func validateSendGrid(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.sendgrid.com/v3/scopes",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Scopes = jsonStringSlice(body, "scopes")
+	r.Privileged = containsAny(r.Scopes, "mail.send") || hasAdminScope(r.Scopes)
+	return r
+}
+
+func validateTelegram(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.telegram.org/bot"+secret+"/getMe", nil)
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	if u := jsonString(body, "username"); u != "" {
+		r.Identity = "@" + u
+	}
+	return r
 }

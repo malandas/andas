@@ -44,24 +44,27 @@ func Detect(content []byte, entropy bool) []RawMatch {
 	return out
 }
 
-// ValidateMatch checks whether a detected secret is live. contextText is the
-// surrounding document, used to find an AWS secret paired with an access key.
-func ValidateMatch(m RawMatch, contextText string, timeoutS int) (validated, live bool, note string) {
+// ValidateMatch checks whether a detected secret is live and, if so, reads its
+// blast radius. contextText is the surrounding document, used to find an AWS
+// secret paired with an access key. validated is false when no validator exists.
+func ValidateMatch(m RawMatch, contextText string, timeoutS int) (validated bool, res Result) {
 	switch {
 	case m.Validator == "":
-		return false, false, "no live validator for this type yet"
+		return false, Result{Note: "no live validator for this type yet"}
 	case m.Validator == "aws":
 		secret := findAWSSecret(contextText, m.Secret)
 		if secret == "" {
-			return false, false, "no paired secret key found near it — cannot verify"
+			return false, Result{Note: "no paired secret key found near it — cannot verify"}
 		}
-		live, note = awsValidateSTS(m.Secret, secret, timeoutS)
-		return true, live, note
+		return true, awsValidateSTS(m.Secret, secret, timeoutS)
 	default:
-		live, note = validate(m.Validator, m.Secret, timeoutS)
-		return true, live, note
+		return true, validate(m.Validator, m.Secret, timeoutS)
 	}
 }
+
+// ApplyResult writes a validation Result onto a finding context (exported for
+// the git-history scanner, which builds findings outside this package).
+func ApplyResult(c *finding.Context, r Result) { applyResult(c, r) }
 
 // Fix returns the remediation step for a secret rule.
 func Fix(ruleID string) string { return secretFix(ruleID) }
