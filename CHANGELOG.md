@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.5.0
+- Function-level evidence completed for all six ecosystems: added Ruby
+  (gem->constant, Const::x / Const.x), Rust (crate::Item), and PHP (use
+  Ns\\Class, mapped via composer.lock PSR-4). Evidence only.
+- Two more live secret validators (Postman, Dropbox) plus detection for
+  Shopify and PyPI tokens. 17 validators, 23 detection patterns.
+
 ## v1.4.0
 - Function-level evidence extended to Python and Go: reachable vulnerable
   packages now show which of their exports your code actually calls

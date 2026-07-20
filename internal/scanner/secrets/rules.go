@@ -147,6 +147,34 @@ var rules = []Rule{
 		Validator: "airtable",
 	},
 	{
+		ID:        "postman-key",
+		Title:     "Postman API Key",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`PMAK-[a-f0-9]{24}-[a-f0-9]{34}`),
+		Validator: "postman",
+	},
+	{
+		ID:        "dropbox-token",
+		Title:     "Dropbox Access Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`sl\.[A-Za-z0-9_-]{100,}`),
+		Validator: "dropbox",
+	},
+	{
+		ID:        "shopify-token",
+		Title:     "Shopify Access Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`shpat_[a-fA-F0-9]{32}`),
+		Validator: "", // needs the shop domain to verify; detection only
+	},
+	{
+		ID:        "pypi-token",
+		Title:     "PyPI Upload Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`pypi-[A-Za-z0-9_-]{16,}`),
+		Validator: "", // no read-only verify endpoint; detection only
+	},
+	{
 		ID:        "private-key",
 		Title:     "Private Key Block",
 		Severity:  finding.SevCritical,

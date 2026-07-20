@@ -57,9 +57,37 @@ func validate(kind, secret string, timeoutS int) Result {
 		return validateNotion(c, secret)
 	case "airtable":
 		return validateAirtable(c, secret)
+	case "postman":
+		return validatePostman(c, secret)
+	case "dropbox":
+		return validateDropbox(c, secret)
 	default:
 		return Result{Note: "no validator"}
 	}
+}
+
+func validatePostman(c *http.Client, secret string) Result {
+	code, _, _, err := doReq(c, "GET", "https://api.getpostman.com/me",
+		map[string]string{"X-Api-Key": secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Scopes = []string{"read/write your Postman workspaces"}
+	return r
+}
+
+func validateDropbox(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "POST", "https://api.dropboxapi.com/2/users/get_current_account",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "email")
+	r.Scopes = []string{"read/write your Dropbox files"}
+	r.Privileged = true
+	return r
 }
 
 func validateFigma(c *http.Client, secret string) Result {

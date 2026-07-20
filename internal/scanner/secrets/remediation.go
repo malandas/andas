@@ -40,6 +40,14 @@ func secretFix(ruleID string) string {
 		return "Rotate the secret in the Notion integration settings (notion.so/my-integrations)."
 	case "airtable-token":
 		return "Revoke the token at https://airtable.com/create/tokens."
+	case "postman-key":
+		return "Regenerate the key in Postman → Account Settings → API Keys."
+	case "dropbox-token":
+		return "Revoke the token in the Dropbox App Console and issue a new one."
+	case "shopify-token":
+		return "Uninstall/reinstall the app or rotate the token in the Shopify admin."
+	case "pypi-token":
+		return "Delete the token at https://pypi.org/manage/account/token/ and create a new one."
 	case "private-key":
 		return "Treat the private key as compromised: rotate the key pair and re-issue any certs signed by it."
 	default:
