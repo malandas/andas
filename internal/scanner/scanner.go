@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mm-fid/andas/internal/finding"
+	"github.com/malandas/andas/internal/finding"
 )
 
 // Scanner is one detection module (secrets, vulnerabilities, ...).

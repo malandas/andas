@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mm-fid/andas/internal/finding"
-	"github.com/mm-fid/andas/internal/report"
-	"github.com/mm-fid/andas/internal/scanner"
-	"github.com/mm-fid/andas/internal/scanner/secrets"
+	"github.com/malandas/andas/internal/finding"
+	"github.com/malandas/andas/internal/report"
+	"github.com/malandas/andas/internal/scanner"
+	"github.com/malandas/andas/internal/scanner/secrets"
 )
 
 // runScan implements `andas scan [path]`.

@@ -3,8 +3,8 @@
 package secrets
 
 import (
-	"github.com/mm-fid/andas/internal/finding"
-	"github.com/mm-fid/andas/internal/scanner"
+	"github.com/malandas/andas/internal/finding"
+	"github.com/malandas/andas/internal/scanner"
 )
 
 // Scanner finds secrets and, when enabled, validates them.

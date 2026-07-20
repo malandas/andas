@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/mm-fid/andas/cmd"
+	"github.com/malandas/andas/cmd"
 )
 
 func main() {

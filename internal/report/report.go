@@ -8,7 +8,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/mm-fid/andas/internal/finding"
+	"github.com/malandas/andas/internal/finding"
 )
 
 // ANSI colours, disabled automatically when NoColor is set.

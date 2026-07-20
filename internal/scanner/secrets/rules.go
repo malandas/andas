@@ -3,7 +3,7 @@ package secrets
 import (
 	"regexp"
 
-	"github.com/mm-fid/andas/internal/finding"
+	"github.com/malandas/andas/internal/finding"
 )
 
 // Rule is one secret-detection pattern. Validator names the live-check to run

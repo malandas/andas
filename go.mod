@@ -1,3 +1,3 @@
-module github.com/mm-fid/andas
+module github.com/malandas/andas
 
 go 1.26.5
