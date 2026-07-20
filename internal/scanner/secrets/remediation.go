@@ -34,6 +34,12 @@ func secretFix(ruleID string) string {
 		return "Regenerate the token at https://cloud.digitalocean.com/account/api/tokens."
 	case "mailgun-key":
 		return "Rotate the key in the Mailgun dashboard (Settings → API Keys)."
+	case "figma-token":
+		return "Revoke the token in Figma → Settings → Personal access tokens."
+	case "notion-token":
+		return "Rotate the secret in the Notion integration settings (notion.so/my-integrations)."
+	case "airtable-token":
+		return "Revoke the token at https://airtable.com/create/tokens."
 	case "private-key":
 		return "Treat the private key as compromised: rotate the key pair and re-issue any certs signed by it."
 	default:

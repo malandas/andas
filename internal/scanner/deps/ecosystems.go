@@ -21,14 +21,17 @@ type ecosystem struct {
 	// reach optionally returns which of refs your source actually imports; nil
 	// means reachability isn't analysed for this ecosystem yet.
 	reach func(root string, ignore []string, refs []pkgRef) map[string]bool
+	// symbols optionally returns which exports of each package the code calls,
+	// keyed by package name — triage evidence, never an auto-downgrade.
+	symbols func(root string, ignore []string, wanted []pkgRef) map[string][]string
 }
 
 var ecosystems = []ecosystem{
-	{"Python", "requirements.txt", parseRequirements, pythonReach},
-	{"Go", "go.mod", parseGoMod, goReach},
-	{"Ruby", "Gemfile.lock", parseGemfileLock, rubyReach},
-	{"Rust", "Cargo.lock", parseCargoLock, rustReach},
-	{"PHP", "composer.lock", parseComposerLock, phpReach},
+	{"Python", "requirements.txt", parseRequirements, pythonReach, pythonSymbols},
+	{"Go", "go.mod", parseGoMod, goReach, goSymbols},
+	{"Ruby", "Gemfile.lock", parseGemfileLock, rubyReach, nil},
+	{"Rust", "Cargo.lock", parseCargoLock, rustReach, nil},
+	{"PHP", "composer.lock", parseComposerLock, phpReach, nil},
 }
 
 // findManifest returns the shallowest manifest of the given name under root.

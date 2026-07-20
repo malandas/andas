@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.4.0
+- Function-level evidence extended to Python and Go: reachable vulnerable
+  packages now show which of their exports your code actually calls
+  (e.g. `your code uses: safe_load`), as JS already did. Evidence only.
+- Three more live secret validators: Figma, Notion, Airtable (15 total).
+
 ## v1.3.0
 - Import-level reachability completed for all six ecosystems: added Ruby, Rust,
   and PHP. Rust maps Cargo hyphens to `use` underscores; PHP reads PSR-4

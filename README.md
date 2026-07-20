@@ -110,7 +110,8 @@ secret anywhere except its legitimate provider. Use `--no-validate` for a fully
 offline scan.
 
 Validators today: GitHub (PATs + OAuth/App tokens), GitLab, Slack, Stripe, npm,
-SendGrid, Telegram, OpenAI, DigitalOcean, Mailgun, and the paired ones —
+SendGrid, Telegram, OpenAI, DigitalOcean, Mailgun, Figma, Notion, Airtable, and
+the paired ones —
 **AWS** (an `AKIA…` key + a nearby secret, proven with a signed STS
 `GetCallerIdentity`) and **Twilio** (an `AC…` SID + a nearby auth token).
 Detection-only: Google, private-key blocks.
@@ -183,7 +184,7 @@ package against [OSV.dev](https://osv.dev):
 
 **All six ecosystems** now get the same real-risk filter: andas parses your
 source and **demotes a vulnerability in any package your code never imports**.
-Each language's import mechanism is handled honestly — Python resolves
+For Python and Go, andas also reports which functions of a vulnerable package your code actually calls (`↳ your code uses: safe_load`). Each language.s import mechanism is handled honestly — Python resolves
 distribution→module aliases (`PyYAML`→`yaml`); Go matches a module or any of its
 subpackages; Rust maps Cargo hyphens to `use` underscores; PHP reads each
 package's PSR-4 namespace from `composer.lock` and matches `use` statements; Ruby
@@ -259,7 +260,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v1.3.0` — **multi-language dependency scanning with import-level reachability across all six ecosystems** (JS/TS, Python, Go, Ruby, Rust, PHP) and **12 live secret validators**, on one real-risk core with blast-radius
+`v1.4.0` — **dependency scanning with import-level reachability across all six ecosystems** (JS/TS, Python, Go, Ruby, Rust, PHP; function-level evidence for JS/Python/Go) and **15 live secret validators**, on one real-risk core with blast-radius
 scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
 a pre-commit guard, four report formats, and a 48-test suite. Strictly
 read-only:

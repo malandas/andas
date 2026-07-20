@@ -126,6 +126,27 @@ var rules = []Rule{
 		Validator: "mailgun",
 	},
 	{
+		ID:        "figma-token",
+		Title:     "Figma Personal Access Token",
+		Severity:  finding.SevMedium,
+		Pattern:   regexp.MustCompile(`figd_[A-Za-z0-9_-]{40,}`),
+		Validator: "figma",
+	},
+	{
+		ID:        "notion-token",
+		Title:     "Notion Integration Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`ntn_[A-Za-z0-9]{36,}`),
+		Validator: "notion",
+	},
+	{
+		ID:        "airtable-token",
+		Title:     "Airtable Personal Access Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`pat[A-Za-z0-9]{14}\.[A-Za-z0-9]{64}`),
+		Validator: "airtable",
+	},
+	{
 		ID:        "private-key",
 		Title:     "Private Key Block",
 		Severity:  finding.SevCritical,

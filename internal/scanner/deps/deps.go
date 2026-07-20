@@ -64,12 +64,26 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		if eco.reach != nil {
 			reachable = eco.reach(root, opts.IgnorePaths, refs)
 		}
+		// Function-level evidence for the reachable vulnerable packages.
+		var symbols map[string][]string
+		if eco.symbols != nil {
+			var wanted []pkgRef
+			for _, r := range refs {
+				if reachable[r.Name] && len(advisories[r.Name]) > 0 {
+					wanted = append(wanted, r)
+				}
+			}
+			symbols = eco.symbols(root, opts.IgnorePaths, wanted)
+		}
 		for name, advs := range advisories {
 			ctx := finding.Context{}
 			if eco.reach != nil {
 				r := reachable[name]
 				ctx.Reachable = &r
 				ctx.Note = ecoReachNote(eco.name, r)
+				if r {
+					ctx.Symbols = symbols[name]
+				}
 			} else {
 				ctx.Note = eco.name + " dependency — reachability analysis not yet available for this ecosystem"
 			}

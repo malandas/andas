@@ -51,9 +51,51 @@ func validate(kind, secret string, timeoutS int) Result {
 		return validateDigitalOcean(c, secret)
 	case "mailgun":
 		return validateMailgun(c, secret)
+	case "figma":
+		return validateFigma(c, secret)
+	case "notion":
+		return validateNotion(c, secret)
+	case "airtable":
+		return validateAirtable(c, secret)
 	default:
 		return Result{Note: "no validator"}
 	}
+}
+
+func validateFigma(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.figma.com/v1/me",
+		map[string]string{"X-Figma-Token": secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "email")
+	r.Scopes = []string{"read/write your Figma files"}
+	return r
+}
+
+func validateNotion(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.notion.com/v1/users/me",
+		map[string]string{"Authorization": "Bearer " + secret, "Notion-Version": "2022-06-28"})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "name")
+	r.Scopes = []string{"access the connected Notion workspace"}
+	return r
+}
+
+func validateAirtable(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.airtable.com/v0/meta/whoami",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "id")
+	r.Scopes = []string{"read/write your Airtable bases"}
+	return r
 }
 
 func validateDigitalOcean(c *http.Client, secret string) Result {
