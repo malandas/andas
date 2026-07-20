@@ -28,15 +28,19 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	var out []finding.Finding
 	for _, f := range files {
 		ext := filepath.Ext(f.Path)
+		// Pre-compute, per line, whether user-controlled input reaches it — either
+		// directly on the line or via a variable assigned from a source earlier in
+		// the same function (a light intra-procedural taint flow).
+		tainted := taintedLines(f.Lines, ext)
 		for lineNo, line := range f.Lines {
 			for _, r := range rules {
 				if !r.exts[ext] || !r.pat.MatchString(line) {
 					continue
 				}
-				userInput := taintRe.MatchString(line)
+				userInput := tainted[lineNo]
 				note := r.cwe + " — pattern-based detection"
 				if userInput {
-					note = r.cwe + " — user-controlled input on this line; likely exploitable"
+					note = r.cwe + " — user-controlled input reaches this line; likely exploitable"
 				}
 				out = append(out, finding.Finding{
 					Kind:     finding.KindCode,

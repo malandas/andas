@@ -236,9 +236,12 @@ patterns — code injection (`eval`), OS command execution, unsafe deserializati
 (`pickle.loads`, `unserialize`), disabled TLS verification, XSS sinks, and SQL
 built by string interpolation — across JS/TS, Python, Ruby, PHP, and Go, each
 tagged with its CWE. The rules are tight and high-signal, and every finding
-notes whether **user-controlled input appears on the same line** (`req.query`,
-`$_GET`, `request.args`, …) — the cheap signal that a dangerous sink is actually
-reachable by an attacker. Detection is pattern-based, not full taint analysis.
+notes whether **user-controlled input reaches it** — either directly on the line
+(`req.query`, `$_GET`, `request.args`, …) or through a variable assigned from
+user input earlier in the same function. andas follows that with a light
+**intra-procedural taint tracker**, so a dangerous sink is flagged as
+user-reachable even when the source is several lines above it. It only ever
+raises a finding's confidence, never lowers it.
 
 ## Infrastructure & CI config (IaC)
 
@@ -283,7 +286,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Status
 
-`v1.7.0` — **five scanners on one real-risk core: secrets (17 live validators), dependencies (6 ecosystems, reachability + function-level), git history, SAST, and IaC/CI config** (Dockerfile, docker-compose, GitHub Actions), on one real-risk core with blast-radius
+`v1.8.0` (SAST now follows a light intra-procedural taint flow) — **five scanners on one real-risk core: secrets (17 live validators), dependencies (6 ecosystems, reachability + function-level), git history, SAST, and IaC/CI config** (Dockerfile, docker-compose, GitHub Actions), on one real-risk core with blast-radius
 scoring, exposure timeline, attack-path narrative, entropy detection, baseline,
 a pre-commit guard, four report formats, and a 48-test suite. Strictly
 read-only:

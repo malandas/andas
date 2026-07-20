@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.8.0
+- SAST gains a light intra-procedural taint tracker: a variable assigned from a
+  user-input source (request.args, $_GET, ...) taints later uses of it within
+  the same function, so a dangerous sink is flagged as user-reachable even when
+  the source is several lines away. Resets at function boundaries; only raises a
+  finding's confidence, never lowers it.
+
 ## v1.7.0
 - New IaC scanner: flags insecure infrastructure/CI config in the files every
   repo ships — Dockerfiles (root user, :latest, ADD from URL, curl|bash, chmod
