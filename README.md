@@ -1,6 +1,5 @@
 # andas
 
-**نَقِّ مخرجاتك الأمنية من الضجيج.** — *Sift real security risk from the noise.*
 
 Most security scanners bury you in alerts. `andas` answers the question they
 don't: **is this risk actually real for *your* project, or is it noise?**
