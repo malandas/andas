@@ -61,7 +61,7 @@ andas hook status      # is it installed?
 andas hook uninstall   # remove it
 ```
 
-The hook runs `andas scan . --offline --fail-on medium` before every commit, so
+The hook runs `andas scan . --offline --since HEAD --fail-on medium` before every commit, so
 a hardcoded secret is caught **before it enters history** — which is the leak
 you can never fully undo. Override a false positive with `git commit --no-verify`.
 
@@ -77,6 +77,7 @@ or a `#` comment. Matching files are skipped by the working-tree scanners.
 |------|---------|---------|
 | `--history` | off | Also scan the full git history for secrets removed from HEAD. |
 | `--licenses` | off | Flag dependency licenses with legal obligations (needs installed deps). |
+| `--since <ref>` | — | Only report findings in files changed since a git ref (fast PR scans). |
 | `--baseline <path>` | — | Suppress findings recorded in this baseline file. |
 | `--update-baseline` | off | Accept all current findings into `--baseline`, then exit. |
 | `--no-entropy` | off | Disable entropy-based detection of unknown/custom secrets. |

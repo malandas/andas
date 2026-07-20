@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.12.0
+- Differential scanning: `andas scan . --since <ref>` reports only findings in
+  files changed versus a git ref (branch, HEAD~1, ...), including new untracked
+  files. Turns a full-repo scan into a fast PR/pre-commit gate that fails on
+  newly introduced risk without re-flagging existing debt. The pre-commit hook
+  now uses --since HEAD.
+
 ## v1.11.0
 - License compliance (`--licenses`): reads installed dependency licenses
   (node_modules, *.dist-info) and flags strong copyleft (GPL/AGPL) and

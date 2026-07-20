@@ -14,11 +14,11 @@ const hookMarker = "# managed by andas — https://github.com/malandas/andas"
 
 const hookScript = `#!/bin/sh
 ` + hookMarker + `
-# Blocks a commit that would add real security risk. Runs offline so it's fast
-# and needs no network; secrets and entropy hits are caught before they land in
-# history. Override a false positive with:  git commit --no-verify
+# Blocks a commit that would add real security risk. Runs offline (fast, no
+# network) and only over what this commit changes, so it blocks NEW secrets
+# without re-flagging pre-existing debt. Override with:  git commit --no-verify
 if command -v andas >/dev/null 2>&1; then
-  andas scan . --offline --fail-on medium || {
+  andas scan . --offline --since HEAD --fail-on medium || {
     echo ""
     echo "andas: commit blocked — resolve the findings above, or re-run with 'git commit --no-verify' to override."
     exit 1

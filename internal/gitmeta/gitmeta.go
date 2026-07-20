@@ -5,6 +5,7 @@ package gitmeta
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,33 @@ func LineIntroduced(dir, file string, line int) (t time.Time, ok bool) {
 		}
 	}
 	return t, false
+}
+
+// ChangedFiles returns the set of files that differ between ref and the working
+// tree (tracked changes + untracked files), as absolute paths under root. It
+// powers `--since`, so a scan can look only at what a branch or PR touched.
+func ChangedFiles(root, ref string) (map[string]bool, error) {
+	out := map[string]bool{}
+	// Committed/staged/unstaged changes vs the ref.
+	diff, err := exec.Command("git", "-C", root, "diff", "--name-only", ref).Output()
+	if err != nil {
+		return nil, err
+	}
+	// Plus files not yet tracked at all (a brand-new secret in a new file).
+	untracked, _ := exec.Command("git", "-C", root, "ls-files", "--others", "--exclude-standard").Output()
+
+	for _, block := range [][]byte{diff, untracked} {
+		for _, rel := range strings.Split(string(block), "\n") {
+			rel = strings.TrimSpace(rel)
+			if rel == "" {
+				continue
+			}
+			if abs, err := filepath.Abs(filepath.Join(root, rel)); err == nil {
+				out[abs] = true
+			}
+		}
+	}
+	return out, nil
 }
 
 // Describe renders an exposure phrase relative to now, e.g.

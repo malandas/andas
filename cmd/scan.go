@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/malandas/andas/internal/config"
+	"github.com/malandas/andas/internal/gitmeta"
 	"github.com/malandas/andas/internal/osv"
 	"github.com/malandas/andas/internal/sbom"
 
@@ -31,6 +33,7 @@ func runScan(args []string) int {
 		offline    = fs.Bool("offline", false, "make no network calls at all (no secret validation, no OSV vuln lookup)")
 		history    = fs.Bool("history", false, "also scan the full git history for secrets removed from HEAD")
 		licScan    = fs.Bool("licenses", false, "also flag dependency licenses with legal obligations (needs installed deps)")
+		since      = fs.String("since", "", "only report findings in files changed since this git ref (e.g. main, HEAD~1)")
 		noEntropy  = fs.Bool("no-entropy", false, "disable entropy-based detection of unknown/custom secrets")
 		baseline   = fs.String("baseline", "", "suppress findings listed in this baseline file")
 		updateBase = fs.Bool("update-baseline", false, "write all current findings to --baseline as accepted, then exit")
@@ -112,6 +115,16 @@ func runScan(args []string) int {
 	}
 	// Drop findings for any rule disabled in .andas.yml.
 	all = filterDisabled(all, cfg)
+
+	// --since: keep only findings in files changed vs a git ref (fast PR scans).
+	if *since != "" {
+		changed, err := gitmeta.ChangedFiles(root, *since)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "andas: --since %q: %v\n", *since, err)
+			return 2
+		}
+		all = filterChanged(all, changed, root)
+	}
 
 	// --update-baseline: accept the current state and stop, so future scans
 	// report only what appears afterwards.
@@ -234,6 +247,23 @@ func filterDisabled(all []finding.Finding, cfg *config.Config) []finding.Finding
 	kept := all[:0]
 	for _, f := range all {
 		if !cfg.Disabled(f.RuleID) {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+// filterChanged keeps only findings whose file is in the changed set. Findings
+// with a synthetic file (git history, image packages) or a manifest that wasn't
+// changed drop out — --since is about what this diff touched.
+func filterChanged(all []finding.Finding, changed map[string]bool, root string) []finding.Finding {
+	kept := all[:0]
+	for _, f := range all {
+		abs := f.File
+		if !filepath.IsAbs(abs) {
+			abs, _ = filepath.Abs(filepath.Join(root, f.File))
+		}
+		if changed[abs] {
 			kept = append(kept, f)
 		}
 	}
