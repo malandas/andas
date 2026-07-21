@@ -13,7 +13,40 @@ don't: **is this risk actually real for *your* project, or is it noise?**
   your app's own code. `andas` traces your imports and demotes vulnerabilities
   in packages nothing imports, and in dev dependencies that never ship.
 
-`andas` finds four kinds of real risk: leaked **secrets** (still live?), vulnerable **dependencies** (does your code reach it?), dangerous **code** in your own source (SAST), and insecure **infrastructure config** (Dockerfiles, docker-compose, GitHub Actions). One dependency-free binary. Linux, macOS, Windows.
+One dependency-free binary scans it all — **secrets, dependencies, your code,
+your config, container images, and licenses** — and ranks by what's *actually*
+exploitable, not what merely matches a pattern.
+
+```text
+$ andas scan .
+
+  CRITICAL  Stripe Secret Key            src/pay.js:12   sk_l******cd
+            ▲ VERIFIED LIVE — rotate this credential now
+            🔓 can access: full account access
+            ⏱ exposed ~63 days (since 2025-05-19)
+  CRITICAL  lodash — Prototype Pollution  package.json    lodash@4.17.11
+            ▲ reachable from your app code
+            ↳ your code uses: merge, template
+  INFO      GitHub Token (old)           src/legacy.js:3 ghp_******yz
+            ▼ verified dead — demoted out of the noise
+
+  7 real risk(s), 41 demoted to noise, 48 total
+```
+
+**That last line is the whole point:** 48 findings, but only 7 that can hurt you.
+
+### What it checks
+
+| | |
+|---|---|
+| 🔑 **Secrets** | 23 patterns, **live-validated** against 17 providers + blast-radius scoring |
+| 📦 **Dependencies** | 6 ecosystems (npm, PyPI, Go, RubyGems, crates, Packagist) with **reachability** |
+| 💻 **Your code (SAST)** | **27 CWE classes** with intra-procedural taint tracking |
+| 🏗️ **Config (IaC)** | Dockerfile · compose · GitHub Actions · Terraform · Kubernetes |
+| 🐳 **Container images** | OS packages (Debian/Ubuntu/Alpine) via `andas image` |
+| 📄 **Licenses & SBOM** | copyleft/unknown-license flags · CycloneDX SBOM |
+
+Dependency-free · read-only · Linux, macOS, Windows.
 
 ## Install
 
@@ -323,7 +356,7 @@ scope parsers, the baseline round-trip (which must never persist raw secret
 material), plus end-to-end tests of the CLI wiring and the git-history scanner.
 CI runs `vet` + `test` and has andas scan its own source on every push.
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history.
+See [CHANGELOG.md](CHANGELOG.md) for release history, [ARCHITECTURE.md](ARCHITECTURE.md) for how it works inside, and [CONTRIBUTING.md](CONTRIBUTING.md) to get involved — new secret validators and SAST rules make great first PRs.
 
 ## Status
 
