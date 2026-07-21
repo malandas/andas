@@ -104,3 +104,17 @@ func TestIaC_Kubernetes(t *testing.T) {
 		t.Errorf("non-k8s yaml should be clean, got %v", fs2)
 	}
 }
+
+func TestIaC_TerraformPrivesc(t *testing.T) {
+	src := `resource "x" "y" {
+  actions   = ["*"]
+  passrole  = ["iam:PassRole"]
+  publicly_accessible = true
+}`
+	fs := scan(t, "iam.tf", src)
+	for _, id := range []string{"tf-iam-wildcard-action", "tf-iam-passrole", "tf-public-rds"} {
+		if !hasRule(fs, id) {
+			t.Errorf("terraform privesc: missing rule %q", id)
+		}
+	}
+}

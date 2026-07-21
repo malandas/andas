@@ -254,6 +254,20 @@ var rules = []rule{
 		regexp.MustCompile(`jwt\.sign\s*\([^)]*,\s*['"][^'"]{4,}['"]`),
 		"Load the signing secret from a secrets manager or env var, not a string literal."},
 
+	// --- Secret shipped to the browser (CWE-200) ---
+	{"frontend-secret", "Secret exposed to the browser (public build-time env var)", finding.SevHigh, "CWE-200", js,
+		regexp.MustCompile(`(?:REACT_APP_|NEXT_PUBLIC_|VUE_APP_|VITE_|GATSBY_)[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE|APIKEY|API_KEY)`),
+		"These env vars are inlined into the client bundle; never put secrets in them — proxy the call through your backend."},
+	{"graphql-introspection", "GraphQL introspection/GraphiQL enabled", finding.SevMedium, "CWE-200", merge(js, py),
+		regexp.MustCompile(`(?i)introspection\s*:\s*true|graphiql\s*:\s*true|GraphQLView\.as_view\([^)]*graphiql\s*=\s*True`),
+		"Disable introspection and GraphiQL in production so the schema isn't handed to attackers."},
+
+	// --- File upload handling (CWE-434) — a surface worth testing ---
+	{"file-upload", "File upload handling (test for unrestricted upload)", finding.SevMedium, "CWE-434",
+		merge(js, py, php, ruby),
+		regexp.MustCompile(`\bmulter\s*\(|req\.files?\b|request\.files\b|\$_FILES\b|move_uploaded_file\s*\(|\.save\s*\([^)]*upload|params\[:file\]|FileField\s*\(`),
+		"Validate the file type, size, and destination; store outside the web root with a random name."},
+
 	// --- Weak TLS/SSL protocol version (CWE-326) ---
 	// Legacy protocol names use char classes (SSL[v]3, TLS[v]1) so andas doesn't
 	// match this very rule when scanning its own source.

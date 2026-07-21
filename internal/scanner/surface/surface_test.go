@@ -65,3 +65,38 @@ func TestSurface_GoAndLaravel(t *testing.T) {
 		t.Error("Laravel route not detected")
 	}
 }
+
+func TestSurface_GoFrameworks(t *testing.T) {
+	src := "r.GET(\"/api/a\", h)\ne.POST(\"/api/b\", h)\nhttp.HandleFunc(\"/c\", h)\nr.Get(\"/d\", h)\n"
+	rs := mapDir(t, "m.go", src)
+	for _, want := range []struct{ m, p string }{{"GET", "/api/a"}, {"POST", "/api/b"}, {"GET", "/c"}, {"GET", "/d"}} {
+		if find(rs, want.m, want.p) == nil {
+			t.Errorf("Go route %s %s not detected", want.m, want.p)
+		}
+	}
+}
+
+func TestSurface_RailsResources(t *testing.T) {
+	rs := mapDir(t, "routes.rb", "resources :posts\n")
+	for _, want := range []struct{ m, p string }{{"GET", "/posts"}, {"POST", "/posts"}, {"GET", "/posts/:id"}, {"DELETE", "/posts/:id"}} {
+		if find(rs, want.m, want.p) == nil {
+			t.Errorf("resources expansion missing %s %s", want.m, want.p)
+		}
+	}
+}
+
+func TestSurface_GraphQL(t *testing.T) {
+	src := "type Query {\n  users(id: ID): [User]\n}\ntype Mutation {\n  del(id: ID!): Boolean\n}\n"
+	rs := mapDir(t, "s.graphql", src)
+	if find(rs, "QUERY", "/graphql#users") == nil || find(rs, "MUTATION", "/graphql#del") == nil {
+		t.Errorf("graphql ops not extracted: %+v", rs)
+	}
+}
+
+func TestSurface_OpenAPI(t *testing.T) {
+	src := "openapi: 3.0.0\npaths:\n  /api/x:\n    get:\n      summary: a\n    post:\n      summary: b\n"
+	rs := mapDir(t, "api.yaml", src)
+	if find(rs, "GET", "/api/x") == nil || find(rs, "POST", "/api/x") == nil {
+		t.Errorf("openapi paths not extracted: %+v", rs)
+	}
+}

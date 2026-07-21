@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/malandas/andas/internal/finding"
+	"github.com/malandas/andas/internal/owasp"
 )
 
 // ANSI colours, disabled automatically when NoColor is set.
@@ -143,6 +144,9 @@ func Text(w io.Writer, findings []finding.Finding, useColor bool) {
 				fmt.Fprintf(w, "           %s\n", color(cRed, "⚠ "+f.Context.Note, useColor))
 			} else if f.Context.Note != "" {
 				fmt.Fprintf(w, "           %s\n", color(cGray, "• "+f.Context.Note, useColor))
+			}
+			if cat := owasp.Category(f.Context.CWE); cat != "" {
+				fmt.Fprintf(w, "           %s\n", color(cGray, "· "+cat, useColor))
 			}
 		case finding.KindConfig:
 			if f.Context.Note != "" {

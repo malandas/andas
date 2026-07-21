@@ -82,6 +82,18 @@ var rules = []rule{
 	{"tf-hardcoded-secret", "Hardcoded credential in Terraform", finding.SevHigh, "terraform",
 		regexp.MustCompile(`(?i)(?:password|secret_key|access_key|private_key)\s*=\s*"[^"$][^"]{6,}"`),
 		"Move the secret to a variable or a secrets manager; never commit it in .tf."},
+	{"tf-iam-wildcard-action", "IAM policy grants all actions (Action: *)", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)"?(?:Action|actions)"?\s*[:=]\s*\[?\s*"\*"`),
+		"Grant least privilege; never allow Action \"*\" — it is effectively admin."},
+	{"tf-iam-passrole", "IAM PassRole allowed (privilege-escalation primitive)", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)"?iam:PassRole"?`),
+		"iam:PassRole lets a principal hand a more-privileged role to a service — scope it to specific roles."},
+	{"tf-iam-assume-wildcard", "AssumeRole trust open to any principal (Principal: *)", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)"?Principal"?\s*[:=]\s*(?:"\*"|\{[^}]*"AWS"\s*[:=]\s*"\*")`),
+		"Restrict the trust policy to specific accounts/roles; a wildcard principal lets anyone assume it."},
+	{"tf-public-rds", "Database publicly accessible", finding.SevHigh, "terraform",
+		regexp.MustCompile(`(?i)publicly_accessible\s*=\s*true`),
+		"Keep databases in private subnets; never expose them to the internet."},
 
 	// --- Kubernetes ---
 	{"k8s-privileged", "Privileged container", finding.SevHigh, "k8s",

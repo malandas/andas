@@ -28,15 +28,49 @@ var fnBoundary = map[string]*regexp.Regexp{
 	".cjs": regexp.MustCompile(`\bfunction\b|=>`),
 }
 
+// reCallTaint matches a call whose arguments contain a user-input source, e.g.
+// `handle(req.query.x)` — group 1 is the callee.
+var reCallTaint = regexp.MustCompile(`([A-Za-z_]\w*)\s*\([^)]*(?:req\.(?:query|params|body)|request\.(?:args|form|json|data|GET|POST)|\$_(?:GET|POST|REQUEST)|params\[)`)
+
+// fnDef extracts a function's name and first meaningful parameter, per language.
+var fnDef = map[string]*regexp.Regexp{
+	".py":  regexp.MustCompile(`^\s*def\s+(\w+)\s*\(\s*(?:self\s*,\s*)?(\w+)`),
+	".rb":  regexp.MustCompile(`^\s*def\s+(\w+)\s*\(?\s*(\w+)`),
+	".go":  regexp.MustCompile(`^\s*func\s+(?:\([^)]*\)\s*)?(\w+)\s*\(\s*(\w+)`),
+	".php": regexp.MustCompile(`\bfunction\s+(\w+)\s*\(\s*\$(\w+)`),
+	".js":  regexp.MustCompile(`function\s+(\w+)\s*\(\s*([\w$]+)`),
+	".ts":  regexp.MustCompile(`function\s+(\w+)\s*\(\s*([\w$]+)`),
+	".jsx": regexp.MustCompile(`function\s+(\w+)\s*\(\s*([\w$]+)`),
+	".tsx": regexp.MustCompile(`function\s+(\w+)\s*\(\s*([\w$]+)`),
+}
+
 // taintedLines returns, per line index, whether user-controlled input reaches it.
+// It follows one inter-procedural hop: a function called with a user-input
+// argument has its parameter treated as tainted inside its own body.
 func taintedLines(lines []string, ext string) []bool {
 	res := make([]bool, len(lines))
 	tainted := map[string]bool{}
 	reset := fnBoundary[ext]
 
+	// Which locally-defined functions are ever called with tainted input?
+	taintedCallees := map[string]bool{}
+	for _, line := range lines {
+		if m := reCallTaint.FindStringSubmatch(line); m != nil {
+			taintedCallees[m[1]] = true
+		}
+	}
+	def := fnDef[ext]
+
 	for i, line := range lines {
 		if reset != nil && reset.MatchString(line) {
 			tainted = map[string]bool{}
+			// Entering a function that's called with user input? Seed its
+			// parameter as tainted for the length of its body.
+			if def != nil {
+				if m := def.FindStringSubmatch(line); m != nil && taintedCallees[m[1]] {
+					tainted[m[2]] = true
+				}
+			}
 		}
 		direct := taintRe.MatchString(line)
 

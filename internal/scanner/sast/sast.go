@@ -26,6 +26,12 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 	if err != nil {
 		return nil, err
 	}
+	// Built-in rules plus any user-defined rules from .andas-rules.yml.
+	active := rules
+	if custom := loadCustomRules(root); len(custom) > 0 {
+		active = append(append([]rule{}, rules...), custom...)
+	}
+
 	var out []finding.Finding
 	for _, f := range files {
 		ext := filepath.Ext(f.Path)
@@ -39,7 +45,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 			if len(line) > 1000 || isComment(line, ext) {
 				continue
 			}
-			for _, r := range rules {
+			for _, r := range active {
 				if !r.exts[ext] || !r.pat.MatchString(line) {
 					continue
 				}
@@ -60,10 +66,27 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					Context:  finding.Context{CWE: r.cwe, UserInput: userInput, Note: note},
 				})
 			}
+			// IDOR needs a window (no ownership check nearby), so it's checked
+			// separately from the pure-regex rules.
+			if idorExts[ext] && detectIDOR(f.Lines, lineNo) {
+				out = append(out, finding.Finding{
+					Kind:     finding.KindCode,
+					RuleID:   "idor",
+					Title:    "Possible IDOR — object fetched by user id with no ownership check",
+					File:     f.Path,
+					Line:     lineNo + 1,
+					Match:    snippet(line),
+					Severity: finding.SevHigh,
+					Fix:      "Scope the query to the current user, or verify ownership/authorization before returning the object.",
+					Context:  finding.Context{CWE: "CWE-639", UserInput: true, Note: "CWE-639 — user-controlled object id with no nearby ownership check"},
+				})
+			}
 		}
 	}
 	return out, nil
 }
+
+var idorExts = merge(js, py, ruby, php)
 
 // isComment reports whether a line is (starts as) a comment, so a pattern that
 // appears in commented-out code or documentation doesn't fire. It handles only

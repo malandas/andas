@@ -178,3 +178,23 @@ func TestSAST_JSRules(t *testing.T) {
 		}
 	}
 }
+
+func TestSAST_FileUpload(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"a.js", "const f = req.files.doc"},
+		{"a.php", "move_uploaded_file($_FILES['f']['tmp_name'], $p);"},
+	} {
+		if hasRule(scanSrc(t, c.name, c.src), "file-upload") == nil {
+			t.Errorf("%s: file-upload not detected on %q", c.name, c.src)
+		}
+	}
+}
+
+func TestSAST_FrontendAndGraphQL(t *testing.T) {
+	if hasRule(scanSrc(t, "a.js", "const k = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY"), "frontend-secret") == nil {
+		t.Error("frontend secret (NEXT_PUBLIC_*_SECRET) not detected")
+	}
+	if hasRule(scanSrc(t, "a.js", "const opts = { introspection: true }"), "graphql-introspection") == nil {
+		t.Error("graphql introspection not detected")
+	}
+}
