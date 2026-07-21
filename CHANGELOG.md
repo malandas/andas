@@ -3,6 +3,11 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.16.0
+- A coloured ASCII banner on the welcome/help screen (`andas`, `andas help`).
+  Shown only on an interactive terminal — never during a scan, so JSON/CI output
+  stays clean; respects NO_COLOR and non-TTY output.
+
 ## v1.15.0
 - SAST expanded from 22 to 27 CWE classes: added LDAP injection (CWE-90), XPath
   injection (CWE-643), prototype pollution (CWE-1321), mass assignment

@@ -7,12 +7,12 @@ import (
 	"os"
 )
 
-const version = "1.15.0"
+const version = "1.16.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
 	if len(os.Args) < 2 {
-		usage()
+		welcome()
 		return 2
 	}
 	switch os.Args[1] {
@@ -26,13 +26,19 @@ func Execute() int {
 		fmt.Printf("andas %s\n", version)
 		return 0
 	case "help", "-h", "--help":
-		usage()
+		welcome()
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "andas: unknown command %q\n\n", os.Args[1])
 		usage()
 		return 2
 	}
+}
+
+// welcome prints the banner then the usage text — the friendly no-args screen.
+func welcome() {
+	fmt.Fprintln(os.Stderr, banner())
+	usage()
 }
 
 func usage() {
