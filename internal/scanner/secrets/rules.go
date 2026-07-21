@@ -91,10 +91,13 @@ var rules = []Rule{
 		Validator: "doppler",
 	},
 	{
-		ID:        "square-token",
-		Title:     "Square Access Token",
-		Severity:  finding.SevCritical, // payments
-		Pattern:   regexp.MustCompile(`EAAA[A-Za-z0-9_\-]{60}`),
+		ID:       "square-token",
+		Title:    "Square Access Token",
+		Severity: finding.SevCritical, // payments
+		// A leading non-base64 boundary stops it matching a 64-char run inside a
+		// base64 blob (e.g. a data: image URL) — a real false positive seen in the
+		// wild in swagger-ui CSS.
+		Pattern:   regexp.MustCompile(`(?:^|[^A-Za-z0-9/+=_-])EAAA[A-Za-z0-9_\-]{60}`),
 		Validator: "square",
 	},
 	{

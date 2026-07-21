@@ -286,3 +286,32 @@ func TestSurface_DotnetGlobalAuth_SplitStartupFile(t *testing.T) {
 		t.Errorf("global auth defined in a split startup file should still apply: %+v", r)
 	}
 }
+
+func TestSurface_DotnetAuthAfterHttpAttr(t *testing.T) {
+	// [Authorize] sits AFTER [HttpPost], several attributes down — the real
+	// ASP.NET order. It must still count as authed.
+	src := "[Route(\"api\")]\npublic class C : ControllerBase {\n" +
+		"  [HttpPost(\"x\")]\n" +
+		"  [ProducesResponseType(200)]\n" +
+		"  [SwaggerOperation(Summary = \"y\")]\n" +
+		"  [Authorize(AuthenticationSchemes = \"MobileScheme\")]\n" +
+		"  public IActionResult X() => Ok();\n}\n"
+	rs := mapDir(t, "C.cs", src)
+	if r := find(rs, "POST", "/api/x"); r == nil || !r.Auth {
+		t.Errorf("[Authorize] after [HttpPost] should still mark the action authed: %+v", r)
+	}
+}
+
+func TestSurface_DotnetCustomPermissionAttr(t *testing.T) {
+	// A policy-based [RequirePermission] implies an authenticated user.
+	src := "[Route(\"api\")]\npublic class C : ControllerBase {\n" +
+		"  [HttpGet(\"x\")]\n  [RequirePermission(EntityPermission.Read)]\n  public IActionResult X() => Ok();\n" +
+		"  [HttpGet(\"open\")]\n  public IActionResult Open() => Ok();\n}\n"
+	rs := mapDir(t, "C.cs", src)
+	if r := find(rs, "GET", "/api/x"); r == nil || !r.Auth {
+		t.Errorf("[RequirePermission] should count as a guard: %+v", r)
+	}
+	if r := find(rs, "GET", "/api/open"); r == nil || r.Auth {
+		t.Errorf("an endpoint with no guard at all must stay no-auth: %+v", r)
+	}
+}

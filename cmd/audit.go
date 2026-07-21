@@ -174,8 +174,15 @@ func splitFindings(all []finding.Finding) (code, secretsF []finding.Finding) {
 // buildAudit computes the counts, exposure, and grade from the raw results.
 func buildAudit(root string, all []finding.Finding, routes []surface.Route, targets []target, secretsF []finding.Finding, elapsed time.Duration) auditResult {
 	counts := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+	// scoreCounts drives the grade from findings andas stands behind — tentative
+	// ones (test-fixture entropy, unverified heuristics) are shown but must not
+	// tank the score, or a repo full of test data always reads as "F".
+	scoreCounts := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
 	for _, f := range all {
 		counts[f.RealRisk().String()]++
+		if f.Confidence() >= finding.Firm {
+			scoreCounts[f.RealRisk().String()]++
+		}
 	}
 	var candidates []target
 	noAuth, exploitable := 0, 0
@@ -192,7 +199,7 @@ func buildAudit(root string, all []finding.Finding, routes []surface.Route, targ
 			}
 		}
 	}
-	score := auditScore(counts, exploitable)
+	score := auditScore(scoreCounts, exploitable)
 	return auditResult{
 		Root: root, Findings: all, Routes: routes, Candidates: candidates,
 		Chains: chains(targets, secretsF), Counts: counts,

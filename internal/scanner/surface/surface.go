@@ -210,7 +210,11 @@ var (
 	reCsClass      = regexp.MustCompile(`\bclass\s+(\w+)`)
 	reCsRoute      = regexp.MustCompile(`\[Route\s*\(\s*"([^"]*)"`)
 	reCsHttp       = regexp.MustCompile(`\[Http(Get|Post|Put|Delete|Patch|Head|Options)\b(?:\s*\(\s*"([^"]*)")?`)
-	reCsAuthorize  = regexp.MustCompile(`\[Authorize\b`)
+	// Recognise the standard authorization attribute AND the common policy-based
+	// conventions (RequirePermission/RequirePolicy/RequireRole…). A permission
+	// check implies an authenticated user, so these count as a guard — this is
+	// how real .NET APIs actually protect endpoints (e.g. [RequirePermission]).
+	reCsAuthorize = regexp.MustCompile(`\[(?:[\w.]+\.)?(?:Authorize|Authorized|RequirePermission|RequirePolicy|RequireRole|RequireScope|RequireClaim|RequireAuthorization)\b`)
 	reCsAnon       = regexp.MustCompile(`\[AllowAnonymous\b`)
 	reCsRouteConst = regexp.MustCompile(`\{(\w+)[:?][^}]*\}`) // {id:guid} / {id?} -> {id}
 	reCsMethodLike = regexp.MustCompile(`^\s*(?:\[[^\]]*\]\s*)*(?:public|private|protected|internal)\b[^;={]*\(`)
@@ -261,14 +265,24 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool, classes map[string]dotnet
 				action = pendingRoute // [HttpGet] paired with a separate [Route("...")]
 			}
 			path := dotnetPath(classPrefix, action, className)
-			// Resolve auth in precedence order: action-level attribute, then
-			// controller-level, then inherited from a base controller's
-			// [Authorize]/[AllowAnonymous], then the app-wide default.
+			// C# attribute order is arbitrary: [Authorize] may sit BEFORE the
+			// [HttpX] (pending) or AFTER it, just above the method. Look both ways
+			// so an action guarded by a trailing [Authorize] isn't mislabelled
+			// no-auth (a real 300+ false-positive cause on production APIs).
+			actionAuth, actionGuard := pendingAuth, pendingGuard
+			if fa, fg := scanForwardAuth(f.Lines, lineNo); fa != authUnknown {
+				if actionAuth == authUnknown || fa == authAnon {
+					actionAuth, actionGuard = fa, fg
+				}
+			}
+			// Resolve in precedence order: action-level attribute, then
+			// controller-level, then inherited from a base controller, then the
+			// app-wide default.
 			auth := classAuth
 			guard := classGuard
-			if pendingAuth != authUnknown {
-				auth = pendingAuth
-				guard = pendingGuard // action-level attribute overrides the controller's
+			if actionAuth != authUnknown {
+				auth = actionAuth
+				guard = actionGuard
 			}
 			if auth == authUnknown {
 				if auth = resolveInheritedAuth(className, classes); auth == authRequired {
@@ -311,6 +325,16 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool, classes map[string]dotnet
 			pendingRoute = ""
 			pendingAuth = authUnknown
 			pendingGuard = ""
+			continue
+		}
+
+		// A method declaration ends an attribute block. Clear pending state so a
+		// trailing [Authorize]/[RequirePermission] (already credited to its own
+		// action via the forward scan) doesn't leak onto the NEXT action.
+		if reCsMethodLike.MatchString(line) {
+			pendingRoute = ""
+			pendingAuth = authUnknown
+			pendingGuard = ""
 		}
 	}
 	_ = seenClass
@@ -338,6 +362,33 @@ func parseAuthorizeGuard(line string) string {
 		return "policy:" + p[1]
 	}
 	return "auth"
+}
+
+// scanForwardAuth looks from an [HttpX] line down to the method it decorates for
+// an [Authorize]/[AllowAnonymous] that sits AFTER the verb attribute — C# allows
+// attributes in any order, so the guard is often the last attribute before the
+// method. Returns the auth verdict and its guard, or authUnknown if none.
+func scanForwardAuth(lines []string, from int) (int, string) {
+	// If the method shares the verb-attribute line (inline handler), there are
+	// no trailing attributes — and scanning on would wrongly read the NEXT
+	// action's [AllowAnonymous].
+	if reCsMethodLike.MatchString(lines[from]) {
+		return authUnknown, ""
+	}
+	for i := from + 1; i < len(lines) && i < from+12; i++ {
+		line := lines[i]
+		// Stop at THIS action's method, before the next action's attributes.
+		if reCsMethodLike.MatchString(line) {
+			break
+		}
+		if reCsAnon.MatchString(line) {
+			return authAnon, ""
+		}
+		if reCsAuthorize.MatchString(line) {
+			return authRequired, parseAuthorizeGuard(line)
+		}
+	}
+	return authUnknown, ""
 }
 
 // dotnetClass records what a controller class declares for auth resolution: its
