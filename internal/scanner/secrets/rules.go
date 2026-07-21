@@ -77,6 +77,57 @@ var rules = []Rule{
 		Validator: "sendgrid",
 	},
 	{
+		ID:        "anthropic-key",
+		Title:     "Anthropic API Key",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`sk-ant-[A-Za-z0-9]{2,}-[A-Za-z0-9_\-]{80,}`),
+		Validator: "anthropic",
+	},
+	{
+		ID:        "doppler-token",
+		Title:     "Doppler Token (secrets manager)",
+		Severity:  finding.SevCritical, // a secrets manager token can read ALL your secrets
+		Pattern:   regexp.MustCompile(`dp\.(?:pt|st|sa|scim|audit)\.[A-Za-z0-9]{40,44}`),
+		Validator: "doppler",
+	},
+	{
+		ID:        "square-token",
+		Title:     "Square Access Token",
+		Severity:  finding.SevCritical, // payments
+		Pattern:   regexp.MustCompile(`EAAA[A-Za-z0-9_\-]{60}`),
+		Validator: "square",
+	},
+	{
+		ID:        "hubspot-token",
+		Title:     "HubSpot Private App Token",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`pat-[a-z]{2}\d-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`),
+		Validator: "hubspot",
+	},
+	{
+		ID:        "mailchimp-key",
+		Title:     "Mailchimp API Key",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`[0-9a-f]{32}-us\d{1,2}`),
+		Validator: "mailchimp",
+	},
+	{
+		ID:        "linear-key",
+		Title:     "Linear API Key",
+		Severity:  finding.SevMedium,
+		Pattern:   regexp.MustCompile(`lin_api_[A-Za-z0-9]{40}`),
+		Validator: "linear",
+	},
+	{
+		ID:       "discord-bot-token",
+		Title:    "Discord Bot Token",
+		Severity: finding.SevHigh,
+		// Three base64url parts like a JWT, but the first segment encodes a numeric
+		// snowflake id (starts M/N/O), so it can't be confused with a JWT (eyJ…).
+		Pattern:   regexp.MustCompile(`[MNO][A-Za-z0-9_-]{23,26}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,40}`),
+		Validator: "discord",
+	},
+	{
 		ID:        "telegram-bot-token",
 		Title:     "Telegram Bot Token",
 		Severity:  finding.SevMedium,

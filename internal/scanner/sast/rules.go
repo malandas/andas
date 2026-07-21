@@ -328,6 +328,64 @@ var rules = []rule{
 		regexp.MustCompile(`(?i)SSL[v]3|TLS[v]1(?:\.0|\.1)?['"\s)]|PROTOCOL_SSL[v][23]|MinVersion\s*:\s*tls\.VersionSSL30|secureProtocol\s*:\s*['"](?:SSL[v]3|TLS[v]1)`),
 		"Require TLS 1.2 or higher; disable legacy SSL and early TLS."},
 
+	// ─── React XSS via dangerouslySetInnerHTML (CWE-79) ──────────────────────
+	// React escapes by default; dangerouslySetInnerHTML opts out and is the top
+	// React XSS vector. The taint engine promotes it to "likely exploitable"
+	// when user input reaches it.
+	{"react-dangerous-html", "React dangerouslySetInnerHTML (XSS sink)", finding.SevMedium, "CWE-79",
+		js,
+		regexp.MustCompile(`dangerouslySetInnerHTML`),
+		"Render text, not HTML; if raw HTML is required, sanitise it with a vetted library (DOMPurify) first."},
+
+	// ─── Zip Slip: unsafe archive extraction (CWE-22) ────────────────────────
+	// extractall() writes every member wherever its (possibly ../-laden) path
+	// says, so a crafted archive can overwrite files outside the target dir.
+	{"zip-slip", "Unsafe archive extraction (Zip Slip / path traversal)", finding.SevMedium, "CWE-22",
+		merge(py, js),
+		regexp.MustCompile(`\.extractall\s*\(|(?:tar|adm-zip|unzipper)\b[^;\n]*\.extract(?:All)?\s*\(`),
+		"Validate each entry resolves inside the target directory before writing (or use a safe extraction filter)."},
+
+	// ─── Ruby insecure deserialization (CWE-502) ─────────────────────────────
+	{"ruby-insecure-deser", "Insecure deserialization (Marshal/YAML.load)", finding.SevHigh, "CWE-502",
+		ruby,
+		regexp.MustCompile(`\bMarshal\.load\b|\bYAML\.load\s*\(|\bOj\.load\b|\bPsych\.load\s*\(`),
+		"Never deserialize untrusted data; use YAML.safe_load / JSON.parse with known types."},
+
+	// ─── ReDoS: catastrophic-backtracking regex (CWE-1333) ───────────────────
+	// A nested quantified group like (a+)+ can take exponential time on a short
+	// crafted input. Scoped to regex constructors so it can't be confused with
+	// arithmetic/division on a `/`-delimited line.
+	{"redos", "Regex with catastrophic backtracking (ReDoS)", finding.SevMedium, "CWE-1333",
+		merge(js, py, php),
+		regexp.MustCompile(`(?:new\s+RegExp\s*\(|re\.(?:compile|match|search|subn?|findall|fullmatch)\s*\(|preg_match(?:_all)?\s*\()[^;\n]*\([^()]*[+*][^()]*\)\s*[+*]`),
+		"Avoid nested quantifiers; rewrite the pattern (e.g. possessive/atomic groups) or bound input length."},
+
+	// ─── Insecure ECB cipher mode (CWE-327) ─────────────────────────────────
+	// ECB encrypts identical plaintext blocks to identical ciphertext, leaking
+	// structure (the classic "ECB penguin"). Use an authenticated mode (GCM).
+	{"ecb-mode", "Insecure ECB cipher mode", finding.SevMedium, "CWE-327",
+		merge(js, py, cs),
+		regexp.MustCompile(`MODE_ECB|CipherMode\.ECB|["']aes-\d+-ecb["']|["'](?:AES|DES|DESede|TripleDES)/ECB`),
+		"Use an authenticated mode such as AES-GCM with a unique nonce; never ECB."},
+
+	// ─── TLS certificate validation disabled (CWE-295) ──────────────────────
+	// Turning off verification opens the connection to a trivial MITM. Covers
+	// Go (InsecureSkipVerify), Python (verify=False / unverified context), and
+	// Node (rejectUnauthorized:false / NODE_TLS_REJECT_UNAUTHORIZED=0).
+	{"tls-verify-disabled", "TLS certificate validation disabled", finding.SevHigh, "CWE-295",
+		merge(js, py, golang),
+		regexp.MustCompile(`InsecureSkipVerify\s*:\s*true|verify\s*=\s*False\b|check_hostname\s*=\s*False\b|ssl\._create_unverified_context|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=?\s*['"]?0`),
+		"Verify the server certificate chain; if a private CA is needed, trust that CA rather than disabling verification."},
+
+	// ─── Sensitive data written to logs (CWE-532) ───────────────────────────
+	// Fires when a logging call is passed a sensitive VALUE — interpolated,
+	// concatenated, a member access, or a bare argument — not merely a string
+	// that contains the word "password", so `log("password reset")` stays quiet.
+	{"sensitive-data-log", "Sensitive data written to a log", finding.SevMedium, "CWE-532",
+		merge(js, py, golang, php, ruby, cs),
+		regexp.MustCompile(`(?:console\.(?:log|info|debug|warn|error)|(?:_?logger?|log)\.(?:info|debug|warn|error|trace|log|Log\w+|Print\w*)|Console\.Write(?:Line)?|System\.out\.print\w*|print(?:ln|f)?|fmt\.(?:S?Print\w*))\s*\([^)]*(?:\$?\{|\+\s*|,\s*|\(\s*|\.|=\s*)\w*(?i:password|passwd|pwd|secret|token|api_?key|private_?key|access_?key|client_?secret|ssn|cvv|creditcard)`),
+		"Never log credentials or PII; redact the value or log a non-sensitive identifier instead."},
+
 	// ─── C# / .NET (ASP.NET Core) ────────────────────────────────────────────
 	// SQL injection: EF Core raw SQL or ADO.NET commands built with an
 	// interpolated ($"…{x}") or concatenated string. The safe APIs

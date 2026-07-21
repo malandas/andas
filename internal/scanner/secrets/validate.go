@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,6 +46,20 @@ func validate(kind, secret string, timeoutS int) Result {
 		return validateSendGrid(c, secret)
 	case "telegram":
 		return validateTelegram(c, secret)
+	case "discord":
+		return validateDiscord(c, secret)
+	case "anthropic":
+		return validateAnthropic(c, secret)
+	case "doppler":
+		return validateDoppler(c, secret)
+	case "square":
+		return validateSquare(c, secret)
+	case "hubspot":
+		return validateHubSpot(c, secret)
+	case "mailchimp":
+		return validateMailchimp(c, secret)
+	case "linear":
+		return validateLinear(c, secret)
 	case "openai":
 		return validateOpenAI(c, secret)
 	case "digitalocean":
@@ -99,6 +114,117 @@ func validateFigma(c *http.Client, secret string) Result {
 	}
 	r.Identity = jsonString(body, "email")
 	r.Scopes = []string{"read/write your Figma files"}
+	return r
+}
+
+// validateDiscord confirms a bot token via the read-only /users/@me endpoint and
+// reads back the bot's identity — the blast radius is "everything this bot can
+// do in every guild it has joined".
+func validateDiscord(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://discord.com/api/v10/users/@me",
+		map[string]string{"Authorization": "Bot " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	name := jsonString(body, "username")
+	if id := jsonString(body, "id"); id != "" {
+		name = strings.TrimSpace(name + " (" + id + ")")
+	}
+	r.Identity = name
+	r.Scopes = []string{"act as the bot in every guild it has joined"}
+	return r
+}
+
+// validateAnthropic confirms a key via the read-only models list (no tokens
+// consumed, no generation).
+func validateAnthropic(c *http.Client, secret string) Result {
+	code, _, _, err := doReq(c, "GET", "https://api.anthropic.com/v1/models",
+		map[string]string{"x-api-key": secret, "anthropic-version": "2023-06-01"})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Scopes = []string{"call the Anthropic API (billed to this account)"}
+	return r
+}
+
+// validateDoppler checks a Doppler token — a secrets-manager credential, so its
+// blast radius is every secret in the workplace.
+func validateDoppler(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.doppler.com/v3/me",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "slug")
+	r.Scopes = []string{"read/write secrets across the Doppler workplace"}
+	r.Privileged = true
+	return r
+}
+
+// validateSquare confirms a payments access token via the locations list.
+func validateSquare(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://connect.squareup.com/v2/locations",
+		map[string]string{"Authorization": "Bearer " + secret, "Square-Version": "2024-01-18"})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "id")
+	r.Scopes = []string{"access Square payments, orders, and customers"}
+	r.Privileged = true
+	return r
+}
+
+// validateHubSpot confirms a private-app token via account details.
+func validateHubSpot(c *http.Client, secret string) Result {
+	code, _, body, err := doReq(c, "GET", "https://api.hubapi.com/account-info/v3/details",
+		map[string]string{"Authorization": "Bearer " + secret})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "portalId")
+	r.Scopes = []string{"access the connected HubSpot CRM portal"}
+	return r
+}
+
+// validateMailchimp confirms an API key. The data centre is encoded in the key
+// suffix (…-us21), so the endpoint is self-contained.
+func validateMailchimp(c *http.Client, secret string) Result {
+	dc := secret[strings.LastIndex(secret, "-")+1:]
+	if dc == "" || dc == secret {
+		return Result{Note: "malformed key (no data-centre suffix)"}
+	}
+	auth := base64.StdEncoding.EncodeToString([]byte("anystring:" + secret))
+	code, _, body, err := doReq(c, "GET", "https://"+dc+".api.mailchimp.com/3.0/",
+		map[string]string{"Authorization": "Basic " + auth})
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	r.Identity = jsonString(body, "account_name")
+	r.Scopes = []string{"read/write Mailchimp audiences and campaigns"}
+	return r
+}
+
+// validateLinear confirms a key via a GraphQL viewer query (POST, read-only).
+func validateLinear(c *http.Client, secret string) Result {
+	code, _, body, err := doReqBody(c, "POST", "https://api.linear.app/graphql",
+		map[string]string{"Authorization": secret, "Content-Type": "application/json"},
+		`{"query":"{ viewer { id name email } }"}`)
+	r, ok := classify(code, err)
+	if !ok {
+		return r
+	}
+	// GraphQL returns 200 even on auth errors; treat an errors array as dead.
+	if strings.Contains(string(body), `"errors"`) && !strings.Contains(string(body), `"viewer"`) {
+		return Result{Note: "provider rejected the credential — revoked or dead"}
+	}
+	r.Identity = jsonString(body, "name")
+	r.Scopes = []string{"read/write Linear issues and teams"}
 	return r
 }
 
@@ -170,7 +296,17 @@ func validateOpenAI(c *http.Client, secret string) Result {
 
 // doReq issues a request and returns the status, headers, and (capped) body.
 func doReq(c *http.Client, method, url string, headers map[string]string) (int, http.Header, []byte, error) {
-	req, err := http.NewRequest(method, url, nil)
+	return doReqBody(c, method, url, headers, "")
+}
+
+// doReqBody is doReq with an optional request body — for providers whose "who am
+// I" check is a POST (e.g. a GraphQL viewer query). Still strictly read-only.
+func doReqBody(c *http.Client, method, url string, headers map[string]string, reqBody string) (int, http.Header, []byte, error) {
+	var rdr io.Reader
+	if reqBody != "" {
+		rdr = strings.NewReader(reqBody)
+	}
+	req, err := http.NewRequest(method, url, rdr)
 	if err != nil {
 		return 0, nil, nil, err
 	}

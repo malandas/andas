@@ -124,7 +124,10 @@ func commitInfo(dir, sha string) (commit, author, date string) {
 // inWorkingTree reports whether the exact secret still appears in a tracked
 // file at HEAD — i.e. whether this is a live-in-code leak or a history-only one.
 func inWorkingTree(dir, secret string) bool {
-	cmd := exec.Command("git", "-C", dir, "grep", "-lF", secret)
+	// `-e <pattern>` marks the secret as the pattern, never an option — so a
+	// value like "--open-files-in-pager=…" can't turn into git-grep argument
+	// injection when scanning a malicious repo's history.
+	cmd := exec.Command("git", "-C", dir, "grep", "-lF", "-e", secret)
 	out, _ := cmd.Output() // exit code 1 (no match) is expected, ignore err
 	return len(strings.TrimSpace(string(out))) > 0
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/malandas/andas/internal/scanner/iac"
 	"github.com/malandas/andas/internal/scanner/sast"
 	"github.com/malandas/andas/internal/scanner/secrets"
+	"github.com/malandas/andas/internal/scanner/surface"
 )
 
 // runReview implements `andas review [path]` — a security code review. It runs
@@ -29,13 +30,14 @@ import (
 func runReview(args []string) int {
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	var (
-		since   = fs.String("since", "", "review only files changed since this git ref (e.g. main) — PR mode")
-		offline = fs.Bool("offline", false, "make no network calls at all")
-		noColor = fs.Bool("no-color", false, "disable coloured output")
-		mdOut   = fs.String("markdown", "", "write the review as Markdown (postable to a PR) to this path")
+		since    = fs.String("since", "", "review only files changed since this git ref (e.g. main) — PR mode")
+		offline  = fs.Bool("offline", false, "make no network calls at all")
+		noColor  = fs.Bool("no-color", false, "disable coloured output")
+		mdOut    = fs.String("markdown", "", "write the review as Markdown (postable to a PR) to this path")
+		htmlOut  = fs.String("html", "", "write an interactive, shareable HTML review to this path")
 		sarifOut = fs.String("sarif", "", "write SARIF for GitHub code scanning (inline PR annotations) to this path")
-		failOn  = fs.String("fail-on", "high", "request changes / exit non-zero at this real-risk level (info|low|medium|high|critical)")
-		timeout = fs.Int("timeout", 15, "per-request network timeout, seconds")
+		failOn   = fs.String("fail-on", "high", "request changes / exit non-zero at this real-risk level (info|low|medium|high|critical)")
+		timeout  = fs.Int("timeout", 15, "per-request network timeout, seconds")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: andas review [path] [flags]")
@@ -99,13 +101,32 @@ func runReview(args []string) int {
 
 	rev := buildReview(all)
 	rev.preexisting = preexisting
-	printReview(os.Stdout, rev, root, scope, !*noColor)
+	if routes, err := surface.Map(root, opts.IgnorePaths); err == nil {
+		rev.conventions = checkConventions(routes)
+	}
+
+	// Security delta: how this change moved the whole project's posture vs the
+	// base. Best-effort — if the base can't be materialised, skip it.
+	var delta *deltaResult
+	if *since != "" {
+		if d, ok := computeSecurityDelta(root, *since, opts, all); ok {
+			delta = &d
+		}
+	}
+	printReview(os.Stdout, rev, delta, root, scope, !*noColor)
 	if *mdOut != "" {
 		if err := writeFile(*mdOut, func(w io.Writer) error { return reviewMarkdown(w, rev, scope) }); err != nil {
 			fmt.Fprintf(os.Stderr, "andas: writing review: %v\n", err)
 			return 1
 		}
 		fmt.Fprintf(os.Stderr, "andas: review written to %s\n", *mdOut)
+	}
+	if *htmlOut != "" {
+		if err := writeFile(*htmlOut, func(w io.Writer) error { return reviewHTML(w, rev, delta, scope) }); err != nil {
+			fmt.Fprintf(os.Stderr, "andas: writing HTML review: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "andas: interactive review written to %s\n", *htmlOut)
 	}
 	if *sarifOut != "" {
 		if err := writeFile(*sarifOut, func(w io.Writer) error { return report.SARIF(w, all) }); err != nil {
@@ -115,8 +136,9 @@ func runReview(args []string) int {
 		fmt.Fprintf(os.Stderr, "andas: SARIF written to %s (upload with github/codeql-action/upload-sarif)\n", *sarifOut)
 	}
 
-	// A reviewer that blocks the merge: request changes at/above the threshold.
-	if rev.highest >= parseSeverity(*failOn) && rev.highest > finding.SevInfo {
+	// A reviewer that blocks the merge: request changes at/above the threshold —
+	// but only on findings it stands behind (tentative ones don't fail CI).
+	if rev.blocking >= parseSeverity(*failOn) && rev.blocking > finding.SevInfo {
 		return 1
 	}
 	return 0
@@ -127,8 +149,11 @@ type reviewData struct {
 	files       []reviewFile
 	counts      map[finding.Severity]int
 	total       int
-	highest     finding.Severity
-	preexisting int // issues in touched files but not on lines this change introduced
+	highest     finding.Severity // highest real risk among all findings
+	blocking    finding.Severity // highest among firm/confirmed findings (drives the verdict)
+	tentative   int              // findings andas couldn't fully stand behind
+	preexisting int              // issues in touched files but not on lines this change introduced
+	conventions []conventionDeviation
 }
 
 type reviewFile struct {
@@ -139,13 +164,24 @@ type reviewFile struct {
 func buildReview(all []finding.Finding) reviewData {
 	byFile := map[string][]finding.Finding{}
 	counts := map[finding.Severity]int{}
-	highest := finding.SevInfo
+	highest, blocking := finding.SevInfo, finding.SevInfo
+	tentative := 0
 	for _, f := range all {
 		rr := f.RealRisk()
 		byFile[f.File] = append(byFile[f.File], f)
 		counts[rr]++
 		if rr > highest {
 			highest = rr
+		}
+		// A reviewer only blocks the merge on findings it stands behind; a
+		// tentative one (test code, unverified heuristic) is shown but doesn't
+		// force "request changes".
+		if f.Confidence() >= finding.Firm {
+			if rr > blocking {
+				blocking = rr
+			}
+		} else {
+			tentative++
 		}
 	}
 	var files []reviewFile
@@ -166,7 +202,7 @@ func buildReview(all []finding.Finding) reviewData {
 		}
 		return len(files[i].findings) > len(files[j].findings)
 	})
-	return reviewData{files: files, counts: counts, total: len(all), highest: highest}
+	return reviewData{files: files, counts: counts, total: len(all), highest: highest, blocking: blocking, tentative: tentative}
 }
 
 func fileHighest(rf reviewFile) finding.Severity {
@@ -214,23 +250,35 @@ func reviewVerdict(highest finding.Severity, total int) (icon, text string) {
 	}
 }
 
-func printReview(w io.Writer, rev reviewData, root, scope string, color bool) {
+func printReview(w io.Writer, rev reviewData, delta *deltaResult, root, scope string, color bool) {
 	p := painter(color)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  "+p(cBold+cCyan, "andas")+p(cDim, " · security code review"))
 	fmt.Fprintln(w, "  "+p(cGray, "reviewing "+scope+"   ·   "+root))
 	fmt.Fprintln(w)
 
-	icon, text := reviewVerdict(rev.highest, rev.total)
+	icon, text := reviewVerdict(rev.blocking, rev.total)
 	vc := cGrn
-	if rev.highest >= finding.SevHigh {
+	if rev.blocking >= finding.SevHigh {
 		vc = cRed
-	} else if rev.highest == finding.SevMedium {
+	} else if rev.blocking == finding.SevMedium {
 		vc = cYel
 	}
 	rule(w, p, "VERDICT")
 	fmt.Fprintf(w, "    %s %s\n", icon, p(vc+cBold, text))
-	fmt.Fprintf(w, "    %s\n\n", p(cDim, reviewTLDR(rev)))
+	fmt.Fprintf(w, "    %s\n", p(cDim, reviewTLDR(rev)))
+	if rev.tentative > 0 {
+		fmt.Fprintf(w, "    %s\n", p(cGray, fmt.Sprintf("%d tentative finding(s) shown for review but not blocking (test code / heuristic)", rev.tentative)))
+	}
+	if delta != nil && delta.worse() {
+		fmt.Fprintf(w, "    %s\n", p(cRed, "⚠ this change increases the project's exposure (see delta below)"))
+	}
+	fmt.Fprintln(w)
+
+	if delta != nil {
+		printDelta(w, *delta, "base", color)
+	}
+	printConventions(w, rev.conventions, color)
 
 	for _, rf := range rev.files {
 		rule(w, p, shortFile(rf.path))
@@ -241,14 +289,29 @@ func printReview(w io.Writer, rev reviewData, root, scope string, color bool) {
 			if cat := owasp.Category(f.Context.CWE); cat != "" {
 				meta += " · " + cat
 			}
-			fmt.Fprintf(w, "  %s %s  %s\n", p(riskColor(rr)+cBold, pad(rr.String(), 8)), p(cGray, loc), p(cBold, f.Title))
+			conf := ""
+			switch f.Confidence() {
+			case finding.Confirmed:
+				conf = p(cGrn, " ✓confirmed")
+			case finding.Tentative:
+				conf = p(cGray, " ?tentative")
+			}
+			fmt.Fprintf(w, "  %s %s  %s%s\n", p(riskColor(rr)+cBold, pad(rr.String(), 8)), p(cGray, loc), p(cBold, f.Title), conf)
 			if m := strings.TrimSpace(f.Match); m != "" {
 				fmt.Fprintf(w, "           %s\n", p(cGray, m))
 			}
 			if meta != "" {
 				fmt.Fprintf(w, "           %s\n", p(cDim, meta))
 			}
-			if f.Fix != "" {
+			if f.Kind == finding.KindCode {
+				if fixed, ok := suggestPatch(f.RuleID, strings.TrimSpace(f.Match)); ok {
+					fmt.Fprintf(w, "           %s\n", p(cGrn+cBold, "suggested fix:"))
+					fmt.Fprintf(w, "           %s\n", p(cRed, "- "+strings.TrimSpace(f.Match)))
+					fmt.Fprintf(w, "           %s\n", p(cGrn, "+ "+strings.TrimSpace(fixed)))
+				} else if f.Fix != "" {
+					fmt.Fprintf(w, "           %s %s\n", p(cGrn, "→"), f.Fix)
+				}
+			} else if f.Fix != "" {
 				fmt.Fprintf(w, "           %s %s\n", p(cGrn, "→"), f.Fix)
 			}
 		}
@@ -296,7 +359,10 @@ func reviewMarkdown(w io.Writer, rev reviewData, scope string) error {
 			if m := strings.TrimSpace(f.Match); m != "" {
 				b.WriteString("  ```\n  " + m + "\n  ```\n")
 			}
-			if f.Fix != "" {
+			if fixed, ok := suggestPatch(f.RuleID, strings.TrimSpace(f.Match)); ok && f.Kind == finding.KindCode {
+				// GitHub renders ```suggestion blocks as a one-click "apply" on the PR.
+				b.WriteString("  ```suggestion\n  " + strings.TrimSpace(fixed) + "\n  ```\n")
+			} else if f.Fix != "" {
 				b.WriteString("  → " + f.Fix + "\n")
 			}
 		}

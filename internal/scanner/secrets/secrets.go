@@ -57,6 +57,12 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					Fix:      secretFix(rule.ID),
 				}
 				switch {
+				case isPlaceholder(m):
+					// A template/dummy value (REPLACE, <your-key>, the AWS docs
+					// EXAMPLE key…) — not a real secret. Demote and don't waste a
+					// network call validating it.
+					fnd.Context.Placeholder = true
+					fnd.Context.Note = "looks like a placeholder/example, not a real credential"
 				case !opts.Validate || rule.Validator == "":
 					if rule.Validator == "" {
 						fnd.Context.Note = "no live validator for this type yet"
@@ -88,6 +94,14 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 					if !isLikelySecret(v) {
 						continue
 					}
+					ctx := finding.Context{
+						Note:     "matched by entropy heuristic — unverified; baseline it if it's a false positive",
+						Exposure: exposure(f.Path, lineNo+1),
+					}
+					if isPlaceholder(v) {
+						ctx.Placeholder = true
+						ctx.Note = "high-entropy but looks like a placeholder/example, not a real credential"
+					}
 					out = append(out, finding.Finding{
 						Kind:     finding.KindSecret,
 						RuleID:   genericRuleID,
@@ -97,10 +111,7 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 						Match:    finding.Redact(v),
 						Severity: finding.SevMedium,
 						Fix:      secretFix(genericRuleID),
-						Context: finding.Context{
-							Note:     "matched by entropy heuristic — unverified; baseline it if it's a false positive",
-							Exposure: exposure(f.Path, lineNo+1),
-						},
+						Context:  ctx,
 					})
 				}
 			}

@@ -90,3 +90,32 @@ func TestReviewTLDR(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewHTML_SelfContainedAndSafe(t *testing.T) {
+	rev := buildReview([]finding.Finding{
+		fnd("config.js", 2, finding.SevCritical, finding.KindSecret, "Stripe <script>alert(1)</script>"),
+		{Kind: finding.KindCode, File: "a.cs", Line: 1, Severity: finding.SevMedium, RuleID: "cs-open-redirect",
+			Title: "Open redirect", Match: "return Redirect(url);", Context: finding.Context{CWE: "CWE-601"}},
+	})
+	var b strings.Builder
+	if err := reviewHTML(&b, rev, nil, "the whole project"); err != nil {
+		t.Fatal(err)
+	}
+	s := b.String()
+	// Self-contained: no external asset references.
+	for _, bad := range []string{"http://", "https://cdn", "<link ", "src=\"http"} {
+		if strings.Contains(s, bad) {
+			t.Errorf("HTML should be self-contained; found %q", bad)
+		}
+	}
+	// XSS-safe: the injected script tag must be escaped, not live.
+	if strings.Contains(s, "<script>alert(1)") {
+		t.Error("finding title was not HTML-escaped — XSS risk")
+	}
+	// Interactive + content present.
+	for _, want := range []string{"onclick=\"flt", "data-conf=", "security code review", "class=\"diff\""} {
+		if !strings.Contains(s, want) {
+			t.Errorf("HTML missing %q", want)
+		}
+	}
+}

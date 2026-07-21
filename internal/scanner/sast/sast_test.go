@@ -364,3 +364,106 @@ func TestSAST_CSharpDepthNoFalsePositives(t *testing.T) {
 		}
 	}
 }
+
+func TestSAST_SensitiveDataInLogs(t *testing.T) {
+	// Logging a sensitive VALUE (variable/interpolation/concat) must fire.
+	positives := map[string]string{
+		"a.js": "console.log('pw:', password);",
+		"b.js": "logger.info(`token=${authToken}`);",
+		"c.py": "print('key=' + api_key)",
+		"d.cs": "_logger.LogInformation(\"secret {S}\", clientSecret);",
+	}
+	for name, src := range positives {
+		if hasRule(scanSrc(t, name, src), "sensitive-data-log") == nil {
+			t.Errorf("%s: expected sensitive-data-log to fire on %q", name, src)
+		}
+	}
+	// Logging the WORD in a plain string, or a non-sensitive value, must not.
+	negatives := map[string]string{
+		"e.js": "console.log('password reset requested');",
+		"f.js": "console.log(user.name);",
+		"g.js": "console.log('done ' + orderId);",
+	}
+	for name, src := range negatives {
+		if f := hasRule(scanSrc(t, name, src), "sensitive-data-log"); f != nil {
+			t.Errorf("%s: false positive on %q (line %d)", name, src, f.Line)
+		}
+	}
+}
+
+func TestSAST_TLSVerifyDisabled(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"a.go", "cfg := &tls.Config{InsecureSkipVerify: true}"},
+		{"b.py", "requests.get(u, verify=False)"},
+		{"c.js", "new https.Agent({ rejectUnauthorized: false })"},
+	} {
+		if hasRule(scanSrc(t, c.name, c.src), "tls-verify-disabled") == nil {
+			t.Errorf("%s: tls-verify-disabled not detected on %q", c.name, c.src)
+		}
+	}
+	// Verification left ON must stay clean.
+	if hasRule(scanSrc(t, "d.py", "requests.get(u, verify=True)"), "tls-verify-disabled") != nil {
+		t.Error("verify=True must not be flagged")
+	}
+}
+
+func TestSAST_ECBMode(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"a.py", "AES.new(key, AES.MODE_ECB)"},
+		{"b.js", "crypto.createCipheriv('aes-256-ecb', key, null)"},
+		{"c.cs", "aes.Mode = CipherMode.ECB;"},
+	} {
+		if hasRule(scanSrc(t, c.name, c.src), "ecb-mode") == nil {
+			t.Errorf("%s: ecb-mode not detected on %q", c.name, c.src)
+		}
+	}
+	if hasRule(scanSrc(t, "d.py", "AES.new(key, AES.MODE_GCM)"), "ecb-mode") != nil {
+		t.Error("GCM must not be flagged as ECB")
+	}
+}
+
+func TestSAST_ReDoS(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"a.py", `re.compile("(a+)+$")`},
+		{"b.js", `new RegExp("(\\d*)*")`},
+	} {
+		if hasRule(scanSrc(t, c.name, c.src), "redos") == nil {
+			t.Errorf("%s: redos not detected on %q", c.name, c.src)
+		}
+	}
+	// Safe: linear regex, non-quantified group, and plain arithmetic with '/'.
+	for _, c := range []struct{ name, src string }{
+		{"c.py", `re.compile("^[a-z]+$")`},
+		{"d.py", `re.compile("(abc)+")`},
+		{"e.js", "const x = a / (b+c) * d;"},
+	} {
+		if hasRule(scanSrc(t, c.name, c.src), "redos") != nil {
+			t.Errorf("%s: false ReDoS positive on %q", c.name, c.src)
+		}
+	}
+}
+
+func TestSAST_ZipSlipAndRubyDeser(t *testing.T) {
+	if hasRule(scanSrc(t, "a.py", "t.extractall(dest)"), "zip-slip") == nil {
+		t.Error("zip-slip (extractall) not detected")
+	}
+	if hasRule(scanSrc(t, "b.rb", "data = Marshal.load(payload)"), "ruby-insecure-deser") == nil {
+		t.Error("Marshal.load not detected")
+	}
+	if hasRule(scanSrc(t, "c.rb", "YAML.load(input)"), "ruby-insecure-deser") == nil {
+		t.Error("YAML.load not detected")
+	}
+	// safe_load must stay clean.
+	if hasRule(scanSrc(t, "d.rb", "YAML.safe_load(input)"), "ruby-insecure-deser") != nil {
+		t.Error("YAML.safe_load must not be flagged")
+	}
+}
+
+func TestSAST_ReactDangerousHTML(t *testing.T) {
+	if hasRule(scanSrc(t, "a.jsx", "<div dangerouslySetInnerHTML={{__html: h}} />"), "react-dangerous-html") == nil {
+		t.Error("dangerouslySetInnerHTML not detected")
+	}
+	if hasRule(scanSrc(t, "b.jsx", "<div>{text}</div>"), "react-dangerous-html") != nil {
+		t.Error("plain JSX must not be flagged")
+	}
+}

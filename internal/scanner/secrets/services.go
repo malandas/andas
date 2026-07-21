@@ -23,6 +23,20 @@ func Service(ruleID string) (name, host string) {
 		return "SendGrid", "api.sendgrid.com"
 	case "telegram-bot-token":
 		return "Telegram Bot", "api.telegram.org"
+	case "discord-bot-token":
+		return "Discord Bot", "discord.com/api"
+	case "anthropic-key":
+		return "Anthropic", "api.anthropic.com"
+	case "doppler-token":
+		return "Doppler", "api.doppler.com"
+	case "square-token":
+		return "Square", "connect.squareup.com"
+	case "hubspot-token":
+		return "HubSpot", "api.hubapi.com"
+	case "mailchimp-key":
+		return "Mailchimp", "api.mailchimp.com"
+	case "linear-key":
+		return "Linear", "api.linear.app"
 	case "openai-key":
 		return "OpenAI", "api.openai.com"
 	case "digitalocean-token":

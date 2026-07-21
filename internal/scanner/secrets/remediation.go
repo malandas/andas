@@ -22,6 +22,20 @@ func secretFix(ruleID string) string {
 		return "Delete the key in SendGrid → Settings → API Keys and regenerate."
 	case "telegram-bot-token":
 		return "Use @BotFather → /revoke to reset the bot token."
+	case "discord-bot-token":
+		return "Regenerate the token in the Discord Developer Portal → your app → Bot → Reset Token."
+	case "anthropic-key":
+		return "Revoke at https://console.anthropic.com/settings/keys and issue a new key."
+	case "doppler-token":
+		return "Revoke the token in Doppler → Settings/Tokens immediately — it can read every project secret."
+	case "square-token":
+		return "Rotate the token in the Square Developer Dashboard; treat all payment data access as compromised."
+	case "hubspot-token":
+		return "Rotate the private-app token in HubSpot → Settings → Integrations → Private Apps."
+	case "mailchimp-key":
+		return "Revoke the key in Mailchimp → Account → Extras → API keys."
+	case "linear-key":
+		return "Revoke the key in Linear → Settings → API → Personal API keys."
 	case "google-api-key":
 		return "Regenerate the key in Google Cloud Console → APIs & Services → Credentials, and add restrictions."
 	case "openai-key":
