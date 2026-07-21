@@ -100,3 +100,110 @@ func TestSurface_OpenAPI(t *testing.T) {
 		t.Errorf("openapi paths not extracted: %+v", rs)
 	}
 }
+
+func TestSurface_RateLimitInline(t *testing.T) {
+	rs := mapDir(t, "r.js", "app.post('/api/login', limiter, h)\napp.post('/api/reset', h)\n")
+	if r := find(rs, "POST", "/api/login"); r == nil || !r.RateLimited {
+		t.Errorf("/api/login has inline limiter, want RateLimited: %+v", r)
+	}
+	if r := find(rs, "POST", "/api/reset"); r == nil || r.RateLimited {
+		t.Errorf("/api/reset has no limiter, want RateLimited=false: %+v", r)
+	}
+}
+
+// mapFiles writes several files into one temp dir and maps them together — used
+// to exercise cross-file behaviour like the global auth-policy detector.
+func mapFiles(t *testing.T, files map[string]string) []Route {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, err := Map(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestSurface_DotnetAttributeRouting(t *testing.T) {
+	src := "namespace App.Controllers;\n" +
+		"[Route(\"departments/{id:guid}\")]\n" +
+		"[Authorize]\n" +
+		"public class DepartmentsController : Controller\n" +
+		"{\n" +
+		"    [HttpGet(\"goals\")]\n" +
+		"    public IActionResult Goals(Guid id) => View();\n" +
+		"    [HttpPost(\"goals/create\")]\n" +
+		"    public IActionResult Create(Guid id) => View();\n" +
+		"}\n"
+	rs := mapDir(t, "DepartmentsController.cs", src)
+	// Controller prefix + action path combine; constraint {id:guid} -> {id}.
+	if r := find(rs, "GET", "/departments/{id}/goals"); r == nil {
+		t.Fatalf("prefix+action not combined; got %+v", rs)
+	} else if !r.Auth {
+		t.Errorf("[Authorize] on controller should mark action authed: %+v", r)
+	}
+	// POST + route param means user input.
+	if r := find(rs, "POST", "/departments/{id}/goals/create"); r == nil || !r.UserInput {
+		t.Errorf("POST action missing or not flagged UserInput: %+v", r)
+	}
+}
+
+func TestSurface_DotnetAbsolutePathAndAllowAnonymous(t *testing.T) {
+	src := "namespace App.Controllers;\n" +
+		"[AllowAnonymous]\n" +
+		"public class HealthController : Controller\n" +
+		"{\n" +
+		"    [HttpGet(\"/healthz\")] public IActionResult Live() => Ok();\n" +
+		"}\n"
+	rs := mapDir(t, "HealthController.cs", src)
+	// A leading '/' is an absolute route — the controller prefix is ignored.
+	r := find(rs, "GET", "/healthz")
+	if r == nil {
+		t.Fatalf("absolute route /healthz not found; got %+v", rs)
+	}
+	if r.Auth {
+		t.Errorf("[AllowAnonymous] controller should not be authed: %+v", r)
+	}
+}
+
+func TestSurface_DotnetGlobalAuthPolicy(t *testing.T) {
+	program := "var b = WebApplication.CreateBuilder();\n" +
+		"b.Services.AddControllersWithViews(o => {\n" +
+		"  var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();\n" +
+		"  o.Filters.Add(new AuthorizeFilter(policy));\n" +
+		"});\n"
+	controller := "namespace App.Controllers;\n" +
+		"[Route(\"reviews\")]\n" +
+		"public class ReviewsController : Controller\n" +
+		"{\n" +
+		"    [HttpGet(\"\")] public IActionResult Index() => View();\n" +
+		"    [AllowAnonymous][HttpGet(\"public\")] public IActionResult Pub() => View();\n" +
+		"}\n"
+	rs := mapFiles(t, map[string]string{"Program.cs": program, "ReviewsController.cs": controller})
+
+	// With a global AuthorizeFilter, a controller with no [Authorize] is still authed.
+	if r := find(rs, "GET", "/reviews"); r == nil || !r.Auth {
+		t.Errorf("global auth filter should mark /reviews authed: %+v", r)
+	}
+	// ...but an explicit [AllowAnonymous] action still opts out.
+	if r := find(rs, "GET", "/reviews/public"); r == nil || r.Auth {
+		t.Errorf("[AllowAnonymous] action should stay unauthed despite global filter: %+v", r)
+	}
+}
+
+func TestSurface_DotnetMinimalApi(t *testing.T) {
+	src := "var app = WebApplication.Create();\n" +
+		"app.MapGet(\"/api/ping\", () => \"pong\");\n" +
+		"app.MapPost(\"/api/users\", (User u) => Results.Ok()).RequireAuthorization();\n"
+	rs := mapDir(t, "Program.cs", src)
+	if find(rs, "GET", "/api/ping") == nil {
+		t.Errorf("minimal API MapGet not found: %+v", rs)
+	}
+	if r := find(rs, "POST", "/api/users"); r == nil || !r.Auth {
+		t.Errorf("MapPost with .RequireAuthorization() should be authed: %+v", r)
+	}
+}

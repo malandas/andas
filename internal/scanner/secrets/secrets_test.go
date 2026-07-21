@@ -113,3 +113,16 @@ func TestSecretFix_AlwaysActionable(t *testing.T) {
 		}
 	}
 }
+
+func TestDetect_ConnectionAndWeakPassword(t *testing.T) {
+	content := []byte("db=\"postgres://admin:s3cr3tpass@10.0.0.5/prod\"\npassword = \"admin\"\n")
+	found := map[string]bool{}
+	for _, m := range Detect(content, false) {
+		found[m.RuleID] = true
+	}
+	for _, want := range []string{"connection-string-creds", "weak-default-password"} {
+		if !found[want] {
+			t.Errorf("Detect missed %q", want)
+		}
+	}
+}

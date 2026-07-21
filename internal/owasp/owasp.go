@@ -7,16 +7,16 @@ package owasp
 func Category(cwe string) string {
 	switch cwe {
 	// A01: Broken Access Control
-	case "CWE-22", "CWE-352", "CWE-601", "CWE-732", "CWE-434", "CWE-639":
+	case "CWE-22", "CWE-352", "CWE-601", "CWE-732", "CWE-434", "CWE-639", "CWE-346":
 		return "A01:2021 Broken Access Control"
 	// A02: Cryptographic Failures
-	case "CWE-321", "CWE-326", "CWE-327", "CWE-328", "CWE-338", "CWE-295", "CWE-614":
+	case "CWE-321", "CWE-326", "CWE-327", "CWE-328", "CWE-338", "CWE-295", "CWE-614", "CWE-922":
 		return "A02:2021 Cryptographic Failures"
 	// A03: Injection
-	case "CWE-78", "CWE-79", "CWE-89", "CWE-90", "CWE-643", "CWE-917", "CWE-1336", "CWE-943", "CWE-95", "CWE-1333":
+	case "CWE-78", "CWE-79", "CWE-89", "CWE-90", "CWE-643", "CWE-917", "CWE-1336", "CWE-943", "CWE-95", "CWE-1333", "CWE-644":
 		return "A03:2021 Injection"
 	// A05: Security Misconfiguration
-	case "CWE-611", "CWE-16":
+	case "CWE-611", "CWE-16", "CWE-942":
 		return "A05:2021 Security Misconfiguration"
 	// A07: Identification and Authentication Failures
 	case "CWE-347", "CWE-287", "CWE-384":

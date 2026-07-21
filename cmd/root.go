@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "2.0.0"
+const version = "2.1.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -26,6 +26,8 @@ func Execute() int {
 		return runSurface(os.Args[2:])
 	case "pentest":
 		return runPentest(os.Args[2:])
+	case "recon":
+		return runRecon(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Printf("andas %s\n", version)
 		return 0
@@ -41,7 +43,7 @@ func Execute() int {
 
 // welcome prints the banner then the usage text — the friendly no-args screen.
 func welcome() {
-	fmt.Fprintln(os.Stderr, banner())
+	renderBanner(os.Stderr)
 	usage()
 }
 
@@ -57,6 +59,7 @@ usage:
   andas image <image.tar>     scan a docker-saved image for vulnerable OS packages
   andas surface [path]        map HTTP endpoints & auth gaps (authorised assessment)
   andas pentest [path]        recon report: endpoints → vulns + live creds (authorised)
+  andas recon [path]          internal hosts, params & fuzzing wordlist (authorised)
   andas hook install          install a git pre-commit secret guard
   andas hook uninstall        remove the pre-commit guard
   andas version               print version

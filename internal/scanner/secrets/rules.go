@@ -175,6 +175,20 @@ var rules = []Rule{
 		Validator: "", // no read-only verify endpoint; detection only
 	},
 	{
+		ID:        "connection-string-creds",
+		Title:     "Credentials embedded in a connection URL",
+		Severity:  finding.SevHigh,
+		Pattern:   regexp.MustCompile(`(?:https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp|ftp|smtp)://[^:@/\s]*:[^@/\s]{3,}@[^\s"'` + "`" + `]+`),
+		Validator: "", // the embedded password can't be provider-validated generically
+	},
+	{
+		ID:        "weak-default-password",
+		Title:     "Hardcoded weak/default password",
+		Severity:  finding.SevMedium,
+		Pattern:   regexp.MustCompile(`(?i)(?:password|passwd|pwd)\s*[:=]\s*['"](?:admin|administrator|password|passwd|123456|12345678|changeme|root|toor|test|secret|welcome|letmein|default|qwerty|p@ssw0rd)['"]`),
+		Validator: "",
+	},
+	{
 		ID:        "private-key",
 		Title:     "Private Key Block",
 		Severity:  finding.SevCritical,

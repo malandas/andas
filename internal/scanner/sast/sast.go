@@ -19,7 +19,7 @@ func (s *Scanner) Name() string { return "sast" }
 // dangerous sink on the same line as one of these is much likelier to be a real,
 // reachable vulnerability than one fed by a constant.
 var taintRe = regexp.MustCompile(
-	`req\.(?:query|params|body|headers)\b|request\.(?:args|form|values|data|GET|POST|params)\b|\bparams\[|\$_(?:GET|POST|REQUEST|COOKIE)\b|r\.(?:FormValue|URL\.Query|PostFormValue)\b|process\.argv|sys\.argv|\binput\s*\(`)
+	`req\.(?:query|params|body|headers)\b|request\.(?:args|form|values|data|GET|POST|params)\b|\bparams\[|\$_(?:GET|POST|REQUEST|COOKIE)\b|r\.(?:FormValue|URL\.Query|PostFormValue)\b|process\.argv|sys\.argv|\binput\s*\(|Request\.(?:Query|Form|Headers|Cookies|Body|QueryString|RouteValues|Params)\b|\[From(?:Query|Route|Form|Body|Header)\]`)
 
 func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, error) {
 	files, err := scanner.WalkText(root, opts.IgnorePaths)

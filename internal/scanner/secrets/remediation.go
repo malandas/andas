@@ -48,6 +48,10 @@ func secretFix(ruleID string) string {
 		return "Uninstall/reinstall the app or rotate the token in the Shopify admin."
 	case "pypi-token":
 		return "Delete the token at https://pypi.org/manage/account/token/ and create a new one."
+	case "connection-string-creds":
+		return "Move the connection URL to a secret store; rotate the embedded password — it's compromised."
+	case "weak-default-password":
+		return "Replace the default/weak password and load it from a secret, not a literal."
 	case "private-key":
 		return "Treat the private key as compromised: rotate the key pair and re-issue any certs signed by it."
 	default:

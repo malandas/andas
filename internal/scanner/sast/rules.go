@@ -37,6 +37,8 @@ var (
 	ruby   = exts(".rb")
 	php    = exts(".php")
 	golang = exts(".go")
+	cs     = exts(".cs")
+	razor  = exts(".cshtml", ".razor")
 )
 
 func merge(ms ...map[string]bool) map[string]bool {
@@ -254,6 +256,56 @@ var rules = []rule{
 		regexp.MustCompile(`jwt\.sign\s*\([^)]*,\s*['"][^'"]{4,}['"]`),
 		"Load the signing secret from a secrets manager or env var, not a string literal."},
 
+	// --- OAuth open redirect via unvalidated redirect_uri (CWE-601) ---
+	{"oauth-redirect-uri", "OAuth redirect built from an unvalidated redirect_uri", finding.SevHigh, "CWE-601", merge(js, py, php),
+		regexp.MustCompile(`(?i)redirect\s*\(\s*[^)]*(?:redirect_uri|returnurl|return_to|next|callback)\b|res\.redirect\s*\(\s*req\.(?:query|body)\.(?:redirect_uri|return|next|url)`),
+		"Validate redirect_uri against a strict allowlist of registered URIs; never redirect to a raw parameter."},
+
+	// --- SSRF chain: user URL into an internal/metadata fetch (CWE-918) ---
+	{"ssrf-internal-fetch", "Request to an internal/metadata host (SSRF surface)", finding.SevHigh, "CWE-918", merge(js, py, golang),
+		regexp.MustCompile(`(?i)(?:axios|fetch|requests\.(?:get|post)|http\.Get|urlopen|HttpClient|got)\s*\([^)]{0,120}(?:169\.254\.169\.254|/latest/meta-data|metadata\.google|127\.0\.0\.1|localhost|\.internal\b)`),
+		"Fetching an internal/metadata endpoint is a classic SSRF sink; allowlist destinations and block link-local ranges."},
+
+	// --- JWT algorithm confusion (CWE-347) ---
+	{"jwt-alg-confusion", "JWT verified allowing symmetric+asymmetric algorithms", finding.SevHigh, "CWE-347", merge(js, py),
+		regexp.MustCompile(`(?i)algorithms?\s*[:=]\s*\[[^\]]*(?:HS256[^\]]*RS256|RS256[^\]]*HS256)`),
+		"Pin verification to one algorithm; accepting both HS* and RS* enables key-confusion forgery."},
+
+	// --- GraphQL DoS: batching/aliasing without limits (CWE-770) ---
+	{"graphql-no-limits", "GraphQL server without query depth/complexity limits", finding.SevMedium, "CWE-770", merge(js, py),
+		regexp.MustCompile(`(?i)(?:ApolloServer|GraphQLSchema|makeExecutableSchema|graphql_sync)\s*\(`),
+		"Add query depth/complexity limits and disable batching, or a single request can exhaust the server."},
+
+	// --- Mass-assignment via spread of request body (CWE-915) ---
+	{"js-spread-req-body", "Mass assignment via spread of the request body", finding.SevMedium, "CWE-915", js,
+		regexp.MustCompile(`\{\s*\.\.\.\s*req\.body\s*\}|Object\.assign\s*\(\s*\w+\s*,\s*req\.body\s*\)`),
+		"Pick an explicit allowlist of fields instead of spreading the whole request body into a model."},
+
+	// --- CORS misconfiguration (CWE-942) ---
+	{"cors-wildcard-credentials", "CORS allows any origin with credentials", finding.SevHigh, "CWE-942", merge(js, py),
+		regexp.MustCompile(`(?i)cors\s*\(\s*\{[^}]*origin\s*:\s*(?:true|['"]\*['"])[^}]*credentials\s*:\s*true|Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"][^)]*Access-Control-Allow-Credentials|origin\s*:\s*req\.headers\.origin`),
+		"Reflect only an allowlist of trusted origins; never combine Allow-Origin '*' (or a reflected origin) with credentials."},
+
+	// --- DOM-based XSS (CWE-79) — client-side source into a sink ---
+	{"dom-xss", "DOM XSS: client-controlled value into an HTML sink", finding.SevHigh, "CWE-79", js,
+		regexp.MustCompile(`(?:innerHTML|outerHTML|document\.write|insertAdjacentHTML|\.html\s*\()\s*[^;]*(?:location\.(?:hash|search|href)|document\.URL|window\.name|document\.referrer)`),
+		"Never write location/URL data as HTML; use textContent or sanitize with a vetted library."},
+
+	// --- postMessage without origin check (CWE-346) ---
+	{"postmessage-no-origin", "message handler — verify event.origin", finding.SevMedium, "CWE-346", js,
+		regexp.MustCompile(`addEventListener\s*\(\s*['"]message['"]`),
+		"In the handler, check event.origin against an allowlist before trusting event.data."},
+
+	// --- Sensitive data in web storage (CWE-922) ---
+	{"token-in-localstorage", "Token/secret stored in localStorage", finding.SevMedium, "CWE-922", js,
+		regexp.MustCompile(`localStorage\.setItem\s*\(\s*['"][^'"]*(?i:token|jwt|secret|password|apikey|auth)`),
+		"Store session tokens in HttpOnly cookies; localStorage is readable by any XSS."},
+
+	// --- Host header injection (CWE-644) ---
+	{"host-header-trust", "Host header trusted (poisoning / open redirect)", finding.SevMedium, "CWE-644", merge(js, py, php),
+		regexp.MustCompile(`req\.(?:headers\.host|hostname)|request\.(?:host|get_host\(\))|\$_SERVER\[['"]HTTP_HOST`),
+		"Validate Host against an allowlist; never build password-reset links or redirects from it."},
+
 	// --- Secret shipped to the browser (CWE-200) ---
 	{"frontend-secret", "Secret exposed to the browser (public build-time env var)", finding.SevHigh, "CWE-200", js,
 		regexp.MustCompile(`(?:REACT_APP_|NEXT_PUBLIC_|VUE_APP_|VITE_|GATSBY_)[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE|APIKEY|API_KEY)`),
@@ -275,4 +327,70 @@ var rules = []rule{
 		merge(py, js, golang),
 		regexp.MustCompile(`(?i)SSL[v]3|TLS[v]1(?:\.0|\.1)?['"\s)]|PROTOCOL_SSL[v][23]|MinVersion\s*:\s*tls\.VersionSSL30|secureProtocol\s*:\s*['"](?:SSL[v]3|TLS[v]1)`),
 		"Require TLS 1.2 or higher; disable legacy SSL and early TLS."},
+
+	// ─── C# / .NET (ASP.NET Core) ────────────────────────────────────────────
+	// SQL injection: EF Core raw SQL or ADO.NET commands built with an
+	// interpolated ($"…{x}") or concatenated string. The safe APIs
+	// (FromSqlInterpolated, parameterised commands) are deliberately NOT matched.
+	{"cs-sql-raw", "Possible SQL injection (raw SQL built by interpolation/concatenation)", finding.SevHigh, "CWE-89", cs,
+		regexp.MustCompile(`(?:FromSqlRaw|ExecuteSqlRaw(?:Async)?|ExecuteSqlCommand|new\s+SqlCommand|new\s+NpgsqlCommand|new\s+MySqlCommand|new\s+SqliteCommand|new\s+OracleCommand)\s*\(\s*(?:\$@?"|@?"[^"]*"\s*\+|[A-Za-z_]\w*\s*\+)`),
+		"Use parameterised queries — FromSqlInterpolated, or command.Parameters.Add(...); never interpolate/concatenate values into SQL."},
+
+	// OS command execution (CWE-78)
+	{"cs-command-exec", "OS command execution via Process.Start", finding.SevHigh, "CWE-78", cs,
+		regexp.MustCompile(`Process\.Start\s*\(|new\s+ProcessStartInfo\s*\(`),
+		"Never pass user input to a shell; use an explicit argument list and validate against an allow-list."},
+
+	// Path traversal (CWE-22) — file API fed a built/interpolated path.
+	{"cs-path-traversal", "Possible path traversal (file access with a dynamic path)", finding.SevMedium, "CWE-22", cs,
+		regexp.MustCompile(`(?:File\.(?:ReadAllText|ReadAllBytes|ReadAllLines|WriteAllText|WriteAllBytes|OpenRead|OpenWrite|Delete|Copy|Move)|new\s+FileStream|new\s+StreamReader)\s*\(\s*(?:\$@?"|Path\.Combine|"[^"]*"\s*\+|[A-Za-z_][\w.]*\s*\+)`),
+		"Canonicalise with Path.GetFullPath and confine the result to an intended base directory before opening it."},
+
+	// Insecure deserialization (CWE-502)
+	{"cs-insecure-deser", "Insecure deserialization (dangerous formatter)", finding.SevHigh, "CWE-502", cs,
+		regexp.MustCompile(`new\s+(?:BinaryFormatter|SoapFormatter|NetDataContractSerializer|LosFormatter|ObjectStateFormatter|JavaScriptSerializer)\b`),
+		"Do not deserialize untrusted data with these formatters; prefer System.Text.Json with known types."},
+	{"cs-json-typenamehandling", "Unsafe JSON.NET TypeNameHandling (deserialization gadget risk)", finding.SevHigh, "CWE-502", cs,
+		regexp.MustCompile(`TypeNameHandling\s*\.\s*(?:All|Auto|Objects|Arrays)`),
+		"Keep TypeNameHandling = None; other modes enable type-confusion/RCE gadgets on untrusted JSON."},
+
+	// XXE (CWE-611)
+	{"cs-xxe", "XML external entity processing enabled (XXE)", finding.SevMedium, "CWE-611", cs,
+		regexp.MustCompile(`DtdProcessing\s*\.\s*Parse|new\s+XmlTextReader\b|XmlResolver\s*=\s*new\s+XmlUrlResolver`),
+		"Set DtdProcessing = Prohibit and XmlResolver = null when reading untrusted XML."},
+
+	// SSRF (CWE-918) — outbound request whose DESTINATION HOST is dynamic. A
+	// relative path ($"/api/...") is not SSRF (the host is fixed by the client),
+	// so we require an absolute URL (scheme) or a bare URL variable/Uri.
+	{"cs-ssrf", "Possible SSRF (outbound request to a dynamic URL)", finding.SevMedium, "CWE-918", cs,
+		regexp.MustCompile(`(?:\.GetAsync|\.GetStringAsync|\.PostAsync|\.DownloadString|\.DownloadData)\s*\(\s*(?:\$@?"https?://|@?"https?://[^"]*"\s*\+)|WebRequest\.Create\s*\(\s*(?:\$@?"|[A-Za-z_][\w.]*|@?"https?)`),
+		"Validate the destination host against an allow-list; never fetch a URL built from user input."},
+
+	// Open redirect (CWE-601) — Redirect() where the HOST is controllable: a bare
+	// variable, an absolute URL, or an interpolation that starts with a variable.
+	// A fixed local path (Redirect($"/account/denied?x={y}")) is safe, so it's
+	// excluded; LocalRedirect is always safe and never matches.
+	{"cs-open-redirect", "Possible open redirect", finding.SevMedium, "CWE-601", cs,
+		regexp.MustCompile(`(?:\bRedirect|\bRedirectPermanent|new\s+RedirectResult)\s*\(\s*(?:[A-Za-z_][\w.]*\s*[)\?,]|\$@?"https?://|\$@?"\{|@?"https?://|new\s+Uri)`),
+		"Use LocalRedirect for user-supplied targets, or validate the URL is a local/allow-listed destination."},
+
+	// Weak crypto (CWE-327/328)
+	{"cs-weak-hash", "Weak hash algorithm (MD5/SHA1)", finding.SevMedium, "CWE-328", cs,
+		regexp.MustCompile(`MD5\.Create\s*\(|SHA1\.Create\s*\(|new\s+MD5CryptoServiceProvider\b|new\s+SHA1(?:CryptoServiceProvider|Managed)\b`),
+		"Use SHA-256+; for passwords use PBKDF2/bcrypt/Argon2 (Rfc2898DeriveBytes)."},
+	{"cs-weak-cipher", "Weak/broken cipher (DES/RC2/3DES)", finding.SevMedium, "CWE-327", cs,
+		regexp.MustCompile(`new\s+DESCryptoServiceProvider\b|new\s+RC2CryptoServiceProvider\b|TripleDES\.Create\s*\(|\bDES\.Create\s*\(`),
+		"Use AES-GCM with a random nonce; DES/3DES/RC2 are broken."},
+
+	// LDAP injection (CWE-90)
+	{"cs-ldap-injection", "Possible LDAP injection (filter built by interpolation/concatenation)", finding.SevMedium, "CWE-90", cs,
+		regexp.MustCompile(`new\s+DirectorySearcher\s*\(\s*(?:\$@?"|[A-Za-z_]\w*\s*\+|"[^"]*"\s*\+)|\.Filter\s*=\s*(?:\$@?"|[^;]*\+)`),
+		"Escape LDAP metacharacters or use a parameterised search; never build the filter from raw input."},
+
+	// XSS via raw HTML output in Razor views (CWE-79). Only flag when the raw
+	// sink is fed request/model data — Html.Raw of a local literal helper (icons,
+	// constant markup) is safe and would otherwise be pure noise.
+	{"cs-razor-raw", "Possible XSS via Html.Raw of model/request data", finding.SevMedium, "CWE-79", razor,
+		regexp.MustCompile(`(?:@?Html\.Raw|new\s+HtmlString)\s*\([^)]*\b(?:Model|ViewBag|ViewData|TempData|Request|Query)\b`),
+		"Let Razor auto-encode; only pass values through Html.Raw after sanitising with a vetted encoder."},
 }

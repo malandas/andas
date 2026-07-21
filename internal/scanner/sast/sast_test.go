@@ -198,3 +198,95 @@ func TestSAST_FrontendAndGraphQL(t *testing.T) {
 		t.Error("graphql introspection not detected")
 	}
 }
+
+func TestSAST_OffensiveRules(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.js", "cors({ origin: true, credentials: true })", "cors-wildcard-credentials"},
+		{"a.js", "el.innerHTML = location.hash", "dom-xss"},
+		{"a.js", "window.addEventListener('message', h)", "postmessage-no-origin"},
+		{"a.js", "localStorage.setItem('jwt_token', t)", "token-in-localstorage"},
+		{"a.js", "const l = 'https://' + req.headers.host", "host-header-trust"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
+	}
+}
+
+func TestSAST_MoreOffensive(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.js", "jwt.verify(t, k, { algorithms: ['HS256','RS256'] })", "jwt-alg-confusion"},
+		{"a.js", "new ApolloServer({ schema })", "graphql-no-limits"},
+		{"a.js", "const u = { ...req.body }", "js-spread-req-body"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
+	}
+}
+
+func TestSAST_OAuthAndSSRF(t *testing.T) {
+	if hasRule(scanSrc(t, "a.js", "res.redirect(req.query.redirect_uri)"), "oauth-redirect-uri") == nil {
+		t.Error("oauth redirect_uri not detected")
+	}
+	if hasRule(scanSrc(t, "a.js", "axios('http://169.254.169.254/' + p)"), "ssrf-internal-fetch") == nil {
+		t.Error("ssrf internal fetch not detected")
+	}
+}
+
+func TestSAST_CSharpRules(t *testing.T) {
+	src := "using Microsoft.AspNetCore.Mvc;\n" +
+		"public class VulnController : Controller\n" +
+		"{\n" +
+		"    [HttpGet(\"u/{id}\")]\n" +
+		"    public IActionResult Get(string id) =>\n" +
+		"        Ok(db.Database.ExecuteSqlRaw($\"SELECT * FROM U WHERE Id = {id}\"));\n" +
+		"    [HttpPost(\"run\")]\n" +
+		"    public IActionResult Run([FromForm] string cmd) { Process.Start(\"sh\", cmd); return Ok(); }\n" +
+		"    [HttpGet(\"f\")]\n" +
+		"    public IActionResult Read(string name) => Ok(File.ReadAllText(\"/d/\" + name));\n" +
+		"    [HttpGet(\"go\")]\n" +
+		"    public IActionResult Go(string url) => Redirect(url);\n" +
+		"    public void Bad() { var f = new BinaryFormatter(); f.Deserialize(s); }\n" +
+		"    public void Hash() { var h = MD5.Create(); }\n" +
+		"}\n"
+	fs := scanSrc(t, "VulnController.cs", src)
+	for _, id := range []string{"cs-sql-raw", "cs-command-exec", "cs-path-traversal", "cs-open-redirect", "cs-insecure-deser", "cs-weak-hash"} {
+		if hasRule(fs, id) == nil {
+			t.Errorf("expected C# rule %q to fire; got %v", id, ruleIDs(fs))
+		}
+	}
+	// Action parameters are user input: the SQLi must be marked reachable.
+	if f := hasRule(fs, "cs-sql-raw"); f != nil && !f.Context.UserInput {
+		t.Error("SQLi from an action parameter should be flagged UserInput (tainted)")
+	}
+}
+
+func TestSAST_CSharpSafeQueriesNotFlagged(t *testing.T) {
+	// Parameterised / interpolated-safe APIs must NOT be flagged as SQLi.
+	src := "public class Repo {\n" +
+		"  public void A(string id) { db.Database.FromSqlInterpolated($\"SELECT * FROM U WHERE Id = {id}\"); }\n" +
+		"  public void B(string id) { var c = new SqlCommand(\"SELECT * FROM U WHERE Id = @id\"); c.Parameters.AddWithValue(\"@id\", id); }\n" +
+		"}\n"
+	fs := scanSrc(t, "Repo.cs", src)
+	if f := hasRule(fs, "cs-sql-raw"); f != nil {
+		t.Errorf("safe parameterised query wrongly flagged as SQLi at line %d", f.Line)
+	}
+}
+
+func TestSAST_CSharpRazorXSS(t *testing.T) {
+	fs := scanSrc(t, "View.cshtml", "<div>@Html.Raw(Model.Bio)</div>\n")
+	if hasRule(fs, "cs-razor-raw") == nil {
+		t.Errorf("expected cs-razor-raw to fire on @Html.Raw; got %v", ruleIDs(fs))
+	}
+}
+
+func ruleIDs(fs []finding.Finding) []string {
+	var out []string
+	for _, f := range fs {
+		out = append(out, f.RuleID)
+	}
+	return out
+}

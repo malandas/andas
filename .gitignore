@@ -1,3 +1,4 @@
 andas
 dist/
 *.exe
+.DS_Store
