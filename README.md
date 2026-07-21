@@ -240,7 +240,8 @@ patterns — code injection (`eval`), OS command execution, unsafe deserializati
 traversal, SSRF, weak crypto (MD5/SHA1, insecure randomness), XXE, template
 injection (SSTI), open redirect, NoSQL injection, disabled TLS, XSS, and SQL
 injection, plus broken JWT verification, insecure cookies, hardcoded crypto keys,
-disabled CSRF, world-writable files, and weak TLS versions — 22 CWE classes
+disabled CSRF, world-writable files, weak TLS, LDAP/XPath injection, prototype
+pollution, mass assignment, and regex-from-input (ReDoS) — 27 CWE classes
 across JS/TS, Python, Ruby, PHP, and Go, each
 tagged with its CWE. The rules are tight and high-signal, and every finding
 notes whether **user-controlled input reaches it** — either directly on the line
@@ -248,7 +249,7 @@ notes whether **user-controlled input reaches it** — either directly on the li
 user input earlier in the same function. andas follows that with a light
 **intra-procedural taint tracker**, so a dangerous sink is flagged as
 user-reachable even when the source is several lines above it. It only ever
-raises a finding's confidence, never lowers it.
+raises a finding's confidence, never lowers it. Comment lines and minified/generated code are skipped to keep false positives down.
 
 ## Infrastructure & CI config (IaC)
 

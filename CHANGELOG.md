@@ -3,6 +3,14 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.15.0
+- SAST expanded from 22 to 27 CWE classes: added LDAP injection (CWE-90), XPath
+  injection (CWE-643), prototype pollution (CWE-1321), mass assignment
+  (CWE-915), and regex-from-user-input / ReDoS (CWE-1333).
+- Fewer false positives: SAST now skips comment lines and minified/generated
+  lines (over 1000 chars), so a dangerous pattern in commented-out code or a
+  bundled file no longer fires.
+
 ## v1.14.0
 - SAST expanded from 15 to 22 CWE classes: added broken JWT verification
   (CWE-347), insecure cookie flags (CWE-614), hardcoded cryptographic keys

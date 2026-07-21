@@ -1,0 +1,3 @@
+# andas's own test files intentionally contain vulnerable patterns and fake
+# secrets/tokens as fixtures — exclude them from scanning this repo.
+*_test.go

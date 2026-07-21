@@ -3,6 +3,7 @@ package sast
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/malandas/andas/internal/finding"
@@ -123,5 +124,41 @@ func TestSAST_V14Classes(t *testing.T) {
 		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
 			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
 		}
+	}
+}
+
+func TestSAST_V15Classes(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.js", "const re = new RegExp(req.query.p)", "regex-from-input"},
+		{"a.js", "Object.assign(target, req.body)", "proto-pollution"},
+		{"a.js", "User.create(req.body)", "mass-assignment"},
+		{"a.js", "doc.evaluate(req.query.xp, node)", "xpath-injection"},
+		{"a.py", "ldap.search_s(b, s, \"(uid=\" + request.args.get('u'))", "ldap-injection"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
+	}
+}
+
+func TestSAST_IgnoresComments(t *testing.T) {
+	// Dangerous patterns inside comments must NOT fire (false-positive reduction).
+	if f := scanSrc(t, "a.py", "# eval(user_input) is dangerous"); len(f) != 0 {
+		t.Errorf("commented eval should be clean, got %v", f)
+	}
+	if f := scanSrc(t, "a.js", "// child_process.exec(cmd) removed"); len(f) != 0 {
+		t.Errorf("commented exec should be clean, got %v", f)
+	}
+	// ...but real code on a non-comment line still fires.
+	if hasRule(scanSrc(t, "a.py", "eval(x)"), "py-eval-exec") == nil {
+		t.Error("real eval() should still be detected")
+	}
+}
+
+func TestSAST_SkipsMinifiedLines(t *testing.T) {
+	long := "var x=eval(" + strings.Repeat("a", 1100) + ")"
+	if f := scanSrc(t, "a.js", long); len(f) != 0 {
+		t.Errorf("minified/very-long line should be skipped, got %v", f)
 	}
 }

@@ -3,6 +3,7 @@ package sast
 import (
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/malandas/andas/internal/finding"
 	"github.com/malandas/andas/internal/scanner"
@@ -33,6 +34,11 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		// the same function (a light intra-procedural taint flow).
 		tainted := taintedLines(f.Lines, ext)
 		for lineNo, line := range f.Lines {
+			// Skip minified/generated lines and comment lines — a pattern match
+			// there is almost always noise, not a real sink.
+			if len(line) > 1000 || isComment(line, ext) {
+				continue
+			}
 			for _, r := range rules {
 				if !r.exts[ext] || !r.pat.MatchString(line) {
 					continue
@@ -57,6 +63,25 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		}
 	}
 	return out, nil
+}
+
+// isComment reports whether a line is (starts as) a comment, so a pattern that
+// appears in commented-out code or documentation doesn't fire. It handles only
+// the leading-marker case — good enough to kill the common false positives.
+func isComment(line, ext string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return false
+	}
+	switch ext {
+	case ".py", ".rb":
+		return strings.HasPrefix(t, "#")
+	case ".php":
+		return strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") ||
+			strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*")
+	default: // js/ts/go/rust and the rest use C-style comments
+		return strings.HasPrefix(t, "//") || strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*")
+	}
 }
 
 // snippet trims a source line to a short, safe-to-print excerpt.

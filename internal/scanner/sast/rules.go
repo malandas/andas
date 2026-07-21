@@ -205,6 +205,35 @@ var rules = []rule{
 		regexp.MustCompile(`chmod\s*\([^)]*0o?777|os\.chmod\([^)]*0o?666|FileMode\s*\(\s*0o?777`),
 		"Grant the least privilege needed; avoid world-writable (0777/0666) modes."},
 
+	// --- LDAP injection (CWE-90) ---
+	{"ldap-injection", "Possible LDAP injection (filter built from input)", finding.SevMedium, "CWE-90",
+		merge(py, js, php, golang),
+		regexp.MustCompile(`(?i)(?:search_s|searchfilter|ldap_search|\.search)\s*\([^)]*(?:\+\s*[A-Za-z_$]|request\.|req\.|\$_(?:GET|POST)|f['"]|#\{)`),
+		"Escape LDAP special characters in user input, or use a parameterised filter API."},
+
+	// --- XPath injection (CWE-643) ---
+	{"xpath-injection", "Possible XPath injection (query built from input)", finding.SevMedium, "CWE-643",
+		merge(py, js, php, ruby, golang),
+		regexp.MustCompile(`(?i)(?:xpath|\.evaluate|selectSingleNode|selectNodes|\.compile)\s*\([^)]*(?:\+\s*[A-Za-z_$]|request\.|req\.|\$_(?:GET|POST)|f['"]|#\{)`),
+		"Use parameterised XPath or escape input; never concatenate it into the expression."},
+
+	// --- Prototype pollution (CWE-1321) ---
+	{"proto-pollution", "Possible prototype pollution (untrusted merge/assign)", finding.SevHigh, "CWE-1321", js,
+		regexp.MustCompile(`(?:Object\.assign|_\.merge|_\.mergeWith|_\.defaultsDeep|extend)\s*\([^)]*req\.(?:body|query|params)|\[[^\]]*req\.(?:body|query|params)[^\]]*\]\s*=`),
+		"Validate/allowlist keys before merging user data; reject __proto__/constructor keys."},
+
+	// --- Mass assignment (CWE-915) ---
+	{"mass-assignment", "Possible mass assignment (whole request bound to a model)", finding.SevMedium, "CWE-915",
+		merge(js, py, ruby),
+		regexp.MustCompile(`(?i)\.(?:create|update|bulkcreate|insertmany)\s*\(\s*req\.(?:body|query)|new\s+\w+\s*\(\s*req\.body|update_attributes\s*\(\s*params\b|\.new\s*\(\s*params\s*\)|objects\.create\s*\(\s*\*\*request`),
+		"Bind only an explicit allowlist of fields (strong params / DTO), not the whole request."},
+
+	// --- Regex from user input / ReDoS (CWE-1333) ---
+	{"regex-from-input", "Regex compiled from user input (ReDoS / injection)", finding.SevMedium, "CWE-1333",
+		merge(js, py),
+		regexp.MustCompile(`new RegExp\s*\(\s*(?:req\.|request\.|[A-Za-z_]\w*\s*[,)])|re\.compile\s*\([^)]*(?:request\.|req\.|\+\s*[A-Za-z_])`),
+		"Never build a regex from user input; use a fixed pattern or a safe matcher with a timeout."},
+
 	// --- Weak TLS/SSL protocol version (CWE-326) ---
 	// Legacy protocol names use char classes (SSL[v]3, TLS[v]1) so andas doesn't
 	// match this very rule when scanning its own source.
