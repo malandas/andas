@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.18.0
+- New `andas pentest` command for authorised assessment: fuses the attack
+  surface, the SAST sinks each endpoint's handler reaches (endpoint -> vuln
+  linking), and live credentials into one prioritised recon report. Ranks
+  no-auth endpoints that reach a dangerous sink first. Terminal output plus a
+  Markdown deliverable (--md). Source-only, read-only.
+
 ## v1.17.0
 - New `andas surface` command: maps a codebase's HTTP attack surface for
   authorised security assessment. Extracts routes from Express, Flask/FastAPI,

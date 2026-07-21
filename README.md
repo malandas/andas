@@ -78,6 +78,7 @@ andas scan . --json           # machine-readable output
 andas scan . --offline        # no network calls at all
 andas image myimg.tar         # scan a docker-saved image for vulnerable OS packages
 andas surface .               # map HTTP endpoints & auth gaps (authorised assessment)
+andas pentest .               # recon report: endpoints -> vulns + live creds
 ```
 
 ### Adopting on a repo that already has debt

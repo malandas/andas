@@ -137,3 +137,17 @@ func normMethod(s string) string {
 	}
 	return s
 }
+
+// HandlerSpan returns [start, end) line numbers for a route's handler: from the
+// route line up to the next route in the same file (capped). Used to attribute
+// dangerous sinks to the endpoint that reaches them.
+func HandlerSpan(routes []Route, i int) (file string, start, end int) {
+	r := routes[i]
+	end = r.Line + 120 // cap: a handler this long is unusual
+	for j := range routes {
+		if routes[j].File == r.File && routes[j].Line > r.Line && routes[j].Line < end {
+			end = routes[j].Line
+		}
+	}
+	return r.File, r.Line, end
+}
