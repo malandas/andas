@@ -21,14 +21,14 @@ exploitable, not what merely matches a pattern.
 $ andas scan .
 
   CRITICAL  Stripe Secret Key            src/pay.js:12   sk_l******cd
-            ▲ VERIFIED LIVE — rotate this credential now
-            🔓 can access: full account access
-            ⏱ exposed ~63 days (since 2025-05-19)
+            â² VERIFIED LIVE — rotate this credential now
+            ð can access: full account access
+            â± exposed ~63 days (since 2025-05-19)
   CRITICAL  lodash — Prototype Pollution  package.json    lodash@4.17.11
-            ▲ reachable from your app code
-            ↳ your code uses: merge, template
+            â² reachable from your app code
+            â³ your code uses: merge, template
   INFO      GitHub Token (old)           src/legacy.js:3 ghp_******yz
-            ▼ verified dead — demoted out of the noise
+            â¼ verified dead — demoted out of the noise
 
   7 real risk(s), 41 demoted to noise, 48 total
 ```
@@ -39,14 +39,14 @@ $ andas scan .
 
 | | |
 |---|---|
-| 🔑 **Secrets** | 23 patterns, **live-validated** against 17 providers + blast-radius scoring |
-| 📦 **Dependencies** | 6 ecosystems (npm, PyPI, Go, RubyGems, crates, Packagist) with **reachability** |
-| 💻 **Your code (SAST)** | **27 CWE classes** with intra-procedural taint tracking |
-| 🏗️ **Config (IaC)** | Dockerfile · compose · GitHub Actions · Terraform · Kubernetes |
-| 🐳 **Container images** | OS packages (Debian/Ubuntu/Alpine) via `andas image` |
-| 📄 **Licenses & SBOM** | copyleft/unknown-license flags · CycloneDX SBOM |
+| ð **Secrets** | 23 patterns, **live-validated** against 17 providers + blast-radius scoring |
+| ð¦ **Dependencies** | 6 ecosystems (npm, PyPI, Go, RubyGems, crates, Packagist) with **reachability** |
+| ð» **Your code (SAST)** | **27 CWE classes** with intra-procedural taint tracking |
+| ðï¸ **Config (IaC)** | Dockerfile Â· compose Â· GitHub Actions Â· Terraform Â· Kubernetes |
+| ð³ **Container images** | OS packages (Debian/Ubuntu/Alpine) via `andas image` |
+| ð **Licenses & SBOM** | copyleft/unknown-license flags Â· CycloneDX SBOM |
 
-Dependency-free · read-only · Linux, macOS, Windows.
+Dependency-free Â· read-only Â· Linux, macOS, Windows.
 
 ## Install
 
@@ -77,6 +77,7 @@ andas scan . --sarif r.sarif  # SARIF for CI / GitHub code scanning
 andas scan . --json           # machine-readable output
 andas scan . --offline        # no network calls at all
 andas image myimg.tar         # scan a docker-saved image for vulnerable OS packages
+andas surface .               # map HTTP endpoints & auth gaps (authorised assessment)
 ```
 
 ### Adopting on a repo that already has debt
@@ -134,9 +135,9 @@ Every finding carries two levels:
 
 - **Severity** — the theoretical/pattern-based level (what other tools give you).
 - **Real risk** — after `andas`'s context check:
-  - secret **verified live** → promoted to `CRITICAL`
-  - secret **verified dead** → demoted to `INFO` (this is the noise we remove)
-  - couldn't verify → keeps its theoretical severity
+  - secret **verified live** â promoted to `CRITICAL`
+  - secret **verified dead** â demoted to `INFO` (this is the noise we remove)
+  - couldn't verify â keeps its theoretical severity
 
 ## What live validation actually does
 
@@ -171,17 +172,17 @@ Because andas is already talking to the provider, it reads back the credential's
 ```
 CRITICAL  GitHub Personal Access Token
           src/ci/deploy.js:8   ghp_••••••yz
-          ▲ VERIFIED LIVE — rotate this credential now
+          â² VERIFIED LIVE — rotate this credential now
           identity: octocat
-          🔓 can access: repo, admin:org, workflow
-          ⚠ HIGH-PRIVILEGE credential — maximum blast radius
+          ð can access: repo, admin:org, workflow
+          â  HIGH-PRIVILEGE credential — maximum blast radius
 ```
 
-- **GitHub** → OAuth scopes (`repo`, `admin:org`, `delete_repo`, …)
-- **GitLab** → personal-access-token scopes (`api`, `sudo`, …)
-- **SendGrid** → API-key scopes (`mail.send`, admin scopes)
-- **AWS** → the identity ARN and account, root/admin flagged
-- **Stripe / npm** → full-access keys flagged as privileged
+- **GitHub** â OAuth scopes (`repo`, `admin:org`, `delete_repo`, …)
+- **GitLab** â personal-access-token scopes (`api`, `sudo`, …)
+- **SendGrid** â API-key scopes (`mail.send`, admin scopes)
+- **AWS** â the identity ARN and account, root/admin flagged
+- **Stripe / npm** â full-access keys flagged as privileged
 
 High-privilege live secrets sort to the very top of the report — same severity,
 bigger blast radius.
@@ -191,13 +192,13 @@ bigger blast radius.
 Two more read-only signals that turn a list of findings into a real picture:
 
 - **Exposure timeline** — from git blame (and commit dates for history leaks),
-  andas tells you *how long* a secret has been exposed: `⏱ exposed ~47 days
+  andas tells you *how long* a secret has been exposed: `â± exposed ~47 days
   (since 2025-11-08)`. A key leaked months ago is a different emergency from one
   added today.
 - **Attack path** — andas narrates how the confirmed findings chain together:
 
   ```
-  ⚔ attack path
+  â attack path
      • A live, high-privilege AWS (arn:…:root) is exposed — an attacker gains account access.
      • Multiple live credentials are exposed together (AWS, GitHub) — one leaked repo hands an attacker all of them.
      • A credential removed from the code is still live in git history — deleting the line never rotated the key.
@@ -212,17 +213,17 @@ package against [OSV.dev](https://osv.dev):
 
 | Language | Manifest | Reachability |
 |----------|----------|--------------|
-| JavaScript / TypeScript | `package.json` + `package-lock.json` / `yarn.lock` | ✅ import-level + used symbols |
-| Python | `requirements.txt` (pinned) | ✅ import-level |
-| Go | `go.mod` | ✅ import-level |
-| Ruby | `Gemfile.lock` | ✅ import-level |
-| Rust | `Cargo.lock` | ✅ import-level |
-| PHP | `composer.lock` | ✅ import-level |
+| JavaScript / TypeScript | `package.json` + `package-lock.json` / `yarn.lock` | â import-level + used symbols |
+| Python | `requirements.txt` (pinned) | â import-level |
+| Go | `go.mod` | â import-level |
+| Ruby | `Gemfile.lock` | â import-level |
+| Rust | `Cargo.lock` | â import-level |
+| PHP | `composer.lock` | â import-level |
 
 **All six ecosystems** now get the same real-risk filter: andas parses your
 source and **demotes a vulnerability in any package your code never imports**.
-For all six languages, andas also reports which functions of a vulnerable package your code actually calls (`↳ your code uses: safe_load`). Each language.s import mechanism is handled honestly — Python resolves
-distribution→module aliases (`PyYAML`→`yaml`); Go matches a module or any of its
+For all six languages, andas also reports which functions of a vulnerable package your code actually calls (`â³ your code uses: safe_load`). Each language.s import mechanism is handled honestly — Python resolves
+distributionâmodule aliases (`PyYAML`â`yaml`); Go matches a module or any of its
 subpackages; Rust maps Cargo hyphens to `use` underscores; PHP reads each
 package's PSR-4 namespace from `composer.lock` and matches `use` statements; Ruby
 falls back to treating **all** gems as reachable when it sees `Bundler.require`
@@ -244,7 +245,7 @@ For a project with a `package.json`, `andas` also:
 
 Reachability is at the **import level** (is the package reached at all). As a
 first step toward function-level reachability, `andas` also reports **which
-exports of a vulnerable package your code actually uses** (`↳ your code uses:
+exports of a vulnerable package your code actually uses** (`â³ your code uses:
 merge, template`) — evidence for triage. It deliberately does **not** downgrade
 on this signal: mapping an advisory to exact functions is unreliable, and a
 false "safe" is worse than a false alarm.
@@ -259,8 +260,8 @@ validates live — reports the case that actually matters:
 ```
 CRITICAL  AWS Access Key ID (in git history)
           git history @ 4f1a9c2 (Sara N., 2025-11-08)   AKIA••••••7Q
-          ▲ removed from HEAD but still recoverable — AWS accepted the key pair — LIVE
-          → fix: Deactivate the key in IAM → Security credentials, then create a fresh pair.
+          â² removed from HEAD but still recoverable — AWS accepted the key pair — LIVE
+          â fix: Deactivate the key in IAM â Security credentials, then create a fresh pair.
 ```
 
 Secrets still in the working tree are left to the normal file scan; `--history`
@@ -317,6 +318,21 @@ It auto-detects whether your project is proprietary (a `private` or `UNLICENSED`
 package.json) or open-source and scores accordingly: an AGPL dependency is a
 `HIGH` obligation for a closed product but merely informational for an OSS one.
 Permissive licenses (MIT, BSD, Apache) are treated as noise.
+
+## Attack-surface map (for authorised assessment)
+
+For a penetration tester or bug-bounty researcher handed a codebase, `andas
+surface` maps the HTTP endpoints it exposes — across Express, Flask/FastAPI,
+Django, Rails, Gin, and Laravel — and surfaces the ones worth testing first:
+**no visible authentication** and **taking user input**.
+
+```text
+POST   /api/exec    ⚠ no-auth ⌨ input   routes.js:5   Express
+GET    /admin       🔒 auth              routes.js:4   Express
+```
+
+It reads source only — it never touches a live target. Use it to plan testing
+on systems you are **authorised** to assess.
 
 ## SBOM (Software Bill of Materials)
 

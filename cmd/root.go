@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "1.16.0"
+const version = "1.17.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -22,6 +22,8 @@ func Execute() int {
 		return runHook(os.Args[2:])
 	case "image":
 		return runImage(os.Args[2:])
+	case "surface":
+		return runSurface(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Printf("andas %s\n", version)
 		return 0
@@ -51,6 +53,7 @@ usage:
   andas scan . --sarif r.sarif write SARIF for CI / code scanning
   andas scan . --markdown r.md write a PR-comment-style Markdown report
   andas image <image.tar>     scan a docker-saved image for vulnerable OS packages
+  andas surface [path]        map HTTP endpoints & auth gaps (authorised assessment)
   andas hook install          install a git pre-commit secret guard
   andas hook uninstall        remove the pre-commit guard
   andas version               print version

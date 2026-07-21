@@ -3,6 +3,12 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.17.0
+- New `andas surface` command: maps a codebase's HTTP attack surface for
+  authorised security assessment. Extracts routes from Express, Flask/FastAPI,
+  Django, Rails, Gin, and Laravel; flags endpoints with no visible auth and
+  those taking user input, ranked juiciest-first. Source-only, read-only.
+
 ## v1.16.0
 - A coloured ASCII banner on the welcome/help screen (`andas`, `andas help`).
   Shown only on an interactive terminal — never during a scan, so JSON/CI output
