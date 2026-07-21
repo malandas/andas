@@ -79,6 +79,7 @@ andas scan . --offline        # no network calls at all
 andas image myimg.tar         # scan a docker-saved image for vulnerable OS packages
 andas surface .               # map HTTP endpoints & auth gaps (authorised assessment)
 andas pentest .               # recon report: endpoints -> vulns + live creds
+andas pentest . --graph a.html  # visual attack map · --md report.md
 ```
 
 ### Adopting on a repo that already has debt
@@ -320,6 +321,24 @@ It auto-detects whether your project is proprietary (a `private` or `UNLICENSED`
 package.json) or open-source and scores accordingly: an AGPL dependency is a
 `HIGH` obligation for a closed product but merely informational for an OSS one.
 Permissive licenses (MIT, BSD, Apache) are treated as noise.
+
+## Pentest mode — `andas pentest` (for authorised assessment)
+
+Handed a codebase for an **authorised** engagement, `andas pentest` fuses
+everything it knows into one prioritised recon report — source-only, it never
+touches a live target:
+
+- **Endpoint → vulnerability** — which dangerous sink each handler reaches.
+- **Attack chains** — synthesised multi-step paths (e.g. *upload → LFI → RCE*).
+- **Auth anomalies** — the unauthenticated "odd one out" among protected siblings.
+- **IDOR** — objects fetched by user id with no ownership check.
+- **Secrets → services & lateral movement** — what each live credential unlocks.
+- **External-exploitability** verdicts, **OWASP Top 10** tags, and **how long each
+  candidate has been exploitable** (from git blame).
+- **Verification recipes + ready `curl` PoCs** (benign markers, authorised use only).
+- `--md` Markdown deliverable · `--graph` visual HTML attack map.
+
+Add your own detections with a `.andas-rules.yml` (custom CWE-tagged SAST rules).
 
 ## Attack-surface map (for authorised assessment)
 

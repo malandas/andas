@@ -3,6 +3,41 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v2.0.0 — pentest mode
+
+andas becomes a dual-use tool: everything before was defensive (real-risk
+scanning); this release adds a full offensive-recon mode for **authorised**
+security assessment. Source-only, read-only — it never touches a live target.
+
+### New commands
+- `andas surface [path]` — map HTTP endpoints (Express, Flask/FastAPI, Django,
+  Rails, Gin/Echo/Chi/net-http, Laravel, GraphQL, OpenAPI/Swagger), flag those
+  with no visible auth and those taking user input.
+- `andas pentest [path]` — a prioritised recon report that fuses the attack
+  surface, the vulnerabilities each endpoint reaches, and live credentials:
+  - **endpoint → vulnerability linking** (which sink each handler reaches)
+  - **attack-chain synthesis** (e.g. upload → LFI → RCE across endpoints)
+  - **auth anomalies** — the unauthenticated "odd one out" among protected siblings
+  - **lateral movement** from live credentials, and a **secrets → services** map
+  - **external-exploitability** verdicts (EXTERNAL-CRITICAL, …)
+  - **verification recipes** and **ready curl PoCs** (benign markers, for
+    authorised targets only)
+  - **OWASP Top 10** categorisation and per-category tally
+  - **how long each candidate has been exploitable** (from git blame)
+  - `--md` Markdown deliverable and `--graph` visual HTML attack map
+
+### New detections
+- **IDOR** (CWE-639): object fetched by user id with no nearby ownership check.
+- Inter-procedural taint: user input followed one hop into a called function.
+- File-upload endpoints (CWE-434), frontend secret leaks (public build-time env
+  vars), GraphQL introspection enabled, JS SQL injection and Node sinks.
+- Terraform IAM privesc (Action:*, iam:PassRole, wildcard trust, public RDS)
+  and Kubernetes/Terraform config on top of the existing IaC set.
+
+### Platform
+- **Custom rules**: drop a `.andas-rules.yml` to add your own CWE-tagged SAST
+  patterns — no rebuild, no plugin.
+
 ## v1.19.0
 - Filled the JavaScript SQL-injection gap and added Node-specific SAST rules:
   query-by-concatenation SQLi (CWE-89), vm.runIn* sandbox escape, spawn/execFile
