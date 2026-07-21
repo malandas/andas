@@ -41,11 +41,18 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		out = append(out, npm...)
 	}
 	for _, eco := range ecosystems {
-		manifest := findManifest(root, eco.manifest)
-		if manifest == "" {
-			continue
+		var manifest string
+		var refs []pkgRef
+		if eco.collect != nil {
+			refs = eco.collect(root)
+			manifest = nugetManifest(root)
+		} else {
+			manifest = findManifest(root, eco.manifest)
+			if manifest == "" {
+				continue
+			}
+			refs = eco.parse(manifest)
 		}
-		refs := eco.parse(manifest)
 		if len(refs) == 0 {
 			continue
 		}

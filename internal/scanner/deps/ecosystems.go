@@ -24,14 +24,84 @@ type ecosystem struct {
 	// symbols optionally returns which exports of each package the code calls,
 	// keyed by package name — triage evidence, never an auto-downgrade.
 	symbols func(root string, ignore []string, wanted []pkgRef) map[string][]string
+	// collect overrides manifest+parse when a language spreads dependencies
+	// across many files (e.g. .NET's per-project .csproj + Directory.Packages.props)
+	// — it gathers every ref from the whole tree.
+	collect func(root string) []pkgRef
 }
 
 var ecosystems = []ecosystem{
-	{"Python", "requirements.txt", parseRequirements, pythonReach, pythonSymbols},
-	{"Go", "go.mod", parseGoMod, goReach, goSymbols},
-	{"Ruby", "Gemfile.lock", parseGemfileLock, rubyReach, rubySymbols},
-	{"Rust", "Cargo.lock", parseCargoLock, rustReach, rustSymbols},
-	{"PHP", "composer.lock", parseComposerLock, phpReach, phpSymbols},
+	{"Python", "requirements.txt", parseRequirements, pythonReach, pythonSymbols, nil},
+	{"Go", "go.mod", parseGoMod, goReach, goSymbols, nil},
+	{"Ruby", "Gemfile.lock", parseGemfileLock, rubyReach, rubySymbols, nil},
+	{"Rust", "Cargo.lock", parseCargoLock, rustReach, rustSymbols, nil},
+	{"PHP", "composer.lock", parseComposerLock, phpReach, phpSymbols, nil},
+	{name: ".NET (NuGet)", collect: nugetCollect},
+}
+
+// NuGet dependency collection: .NET declares packages as <PackageReference> in
+// each .csproj and, with central management, <PackageVersion> in
+// Directory.Packages.props — so we gather from the whole tree.
+var (
+	reNugetInclVer = regexp.MustCompile(`<Package(?:Reference|Version)\b[^>]*?Include="([^"]+)"[^>]*?Version="([^"]+)"`)
+	reNugetVerIncl = regexp.MustCompile(`<Package(?:Reference|Version)\b[^>]*?Version="([^"]+)"[^>]*?Include="([^"]+)"`)
+)
+
+func nugetCollect(root string) []pkgRef {
+	seen := map[string]string{}
+	add := func(name, ver string) {
+		if name != "" && ver != "" {
+			if _, ok := seen[name]; !ok {
+				seen[name] = ver
+			}
+		}
+	}
+	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if skipVendorDir[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		n := d.Name()
+		if !strings.HasSuffix(n, ".csproj") && n != "Directory.Packages.props" && n != "Directory.Build.props" && n != "Packages.props" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		for _, m := range reNugetInclVer.FindAllStringSubmatch(string(data), -1) {
+			add(m[1], m[2])
+		}
+		for _, m := range reNugetVerIncl.FindAllStringSubmatch(string(data), -1) {
+			add(m[2], m[1])
+		}
+		return nil
+	})
+	var refs []pkgRef
+	for name, ver := range seen {
+		refs = append(refs, pkgRef{Name: name, Version: ver, Ecosystem: "NuGet"})
+	}
+	return refs
+}
+
+// nugetManifest returns a representative file to attribute NuGet findings to.
+func nugetManifest(root string) string {
+	if m := findManifest(root, "Directory.Packages.props"); m != "" {
+		return m
+	}
+	best := ""
+	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && best == "" && strings.HasSuffix(d.Name(), ".csproj") {
+			best = path
+		}
+		return nil
+	})
+	return best
 }
 
 // findManifest returns the shallowest manifest of the given name under root.

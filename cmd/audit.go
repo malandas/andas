@@ -40,7 +40,8 @@ type auditResult struct {
 func runAudit(args []string) int {
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	var (
-		offline = fs.Bool("offline", false, "make no network calls at all")
+		offline    = fs.Bool("offline", false, "make no network calls at all")
+		noValidate = fs.Bool("no-validate", false, "check dependencies (OSV) but don't send secrets to their providers")
 		noColor = fs.Bool("no-color", false, "disable coloured output")
 		asJSON  = fs.Bool("json", false, "emit the full audit as JSON")
 		htmlOut = fs.String("html", "", "write a self-contained executive HTML report to this path")
@@ -67,7 +68,7 @@ func runAudit(args []string) int {
 		return 1
 	}
 	opts := scanner.Options{
-		Validate:    !*offline,
+		Validate:    !*offline && !*noValidate,
 		Offline:     *offline,
 		Entropy:     true,
 		TimeoutS:    *timeout,

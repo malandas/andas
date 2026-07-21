@@ -86,7 +86,7 @@ func SARIF(w io.Writer, findings []finding.Finding) error {
 			Tool: tool{Driver: driver{
 				Name:           "andas",
 				InformationURI: "https://github.com/malandas/andas",
-				Version:        "2.3.1",
+				Version:        "2.3.2",
 				Rules:          []interface{}{},
 			}},
 			Results: results,

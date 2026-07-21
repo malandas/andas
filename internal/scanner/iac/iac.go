@@ -126,6 +126,12 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				if r.kind != kind || !r.pat.MatchString(line) {
 					continue
 				}
+				// Passing untrusted input via an env/output/with VALUE is the
+				// recommended mitigation — don't flag the safe pattern, only its
+				// use embedded in a run: script.
+				if r.id == "gha-script-injection" && ghaSafeExprAssignment(line) {
+					continue
+				}
 				out = append(out, finding.Finding{
 					Kind:     finding.KindConfig,
 					RuleID:   r.id,
@@ -206,4 +212,13 @@ func snippet(line string) string {
 		s = s[:99] + "…"
 	}
 	return s
+}
+
+// reGhaSafeExpr matches a YAML mapping value that is ONLY a ${{ … }} expression
+// — the env/output/with pattern that safely quotes untrusted input.
+var reGhaSafeExpr = regexp.MustCompile(`^\s*([\w-]+):\s*"?\$\{\{[^}]*\}\}"?\s*$`)
+
+func ghaSafeExprAssignment(line string) bool {
+	m := reGhaSafeExpr.FindStringSubmatch(line)
+	return m != nil && strings.ToLower(m[1]) != "run"
 }

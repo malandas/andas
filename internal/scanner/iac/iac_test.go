@@ -118,3 +118,19 @@ func TestIaC_TerraformPrivesc(t *testing.T) {
 		}
 	}
 }
+
+func TestGHA_ScriptInjectionEnvVsRun(t *testing.T) {
+	// Safe: passed via an env value → must NOT flag. Dangerous: inlined in run → flag.
+	src := "on: pull_request\njobs:\n  a:\n    steps:\n" +
+		"      - env:\n          MSG: ${{ github.event.head_commit.message }}\n        run: echo \"$MSG\"\n" +
+		"      - run: echo \"${{ github.event.head_commit.message }}\"\n"
+	n := 0
+	for _, f := range scan(t, ".github/workflows/ci.yaml", src) {
+		if f.RuleID == "gha-script-injection" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("expected exactly 1 script-injection (the run: one), got %d", n)
+	}
+}
