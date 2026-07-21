@@ -1,6 +1,7 @@
 package sast
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -32,13 +33,22 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 		active = append(append([]rule{}, rules...), custom...)
 	}
 
+	// [IgnoreAntiforgeryToken] is only a real CSRF risk when the app validates
+	// antiforgery globally (there's then something to opt out of). Detect that
+	// once, up front, so the rule stays silent on apps that don't — avoiding a
+	// wave of findings on a harmless, no-op attribute.
+	globalAntiforgery := dotnetGlobalAntiforgery(files)
+
+	// Pre-compute, per file and line, whether user-controlled input reaches it —
+	// following taint within a function, across a call chain, and across file
+	// boundaries (controller → service). A tainted sink is far likelier real.
+	taintByFile := crossFileTaint(files)
+
 	var out []finding.Finding
 	for _, f := range files {
 		ext := filepath.Ext(f.Path)
-		// Pre-compute, per line, whether user-controlled input reaches it — either
-		// directly on the line or via a variable assigned from a source earlier in
-		// the same function (a light intra-procedural taint flow).
-		tainted := taintedLines(f.Lines, ext)
+		ft := taintByFile[f.Path]
+		tainted := ft.tainted
 		for lineNo, line := range f.Lines {
 			// Skip minified/generated lines and comment lines — a pattern match
 			// there is almost always noise, not a real sink.
@@ -49,10 +59,26 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 				if !r.exts[ext] || !r.pat.MatchString(line) {
 					continue
 				}
+				// Context gate: skip the CSRF opt-out finding unless global
+				// antiforgery makes the attribute actually disable something.
+				if r.id == "cs-csrf-disabled" && !globalAntiforgery {
+					continue
+				}
 				userInput := tainted[lineNo]
+				// An XSS sink fed HTML-encoded input isn't actually exploitable —
+				// don't raise its confidence. (Only affects CWE-79; other injection
+				// classes are unaffected by HTML encoding.)
+				if userInput && r.cwe == "CWE-79" && lineNo < len(ft.htmlSafe) && ft.htmlSafe[lineNo] {
+					userInput = false
+				}
 				note := r.cwe + " — pattern-based detection"
 				if userInput {
 					note = r.cwe + " — user-controlled input reaches this line; likely exploitable"
+					// Show where the input entered, when it's a different line — the
+					// flow a reviewer follows from source to sink.
+					if o := ft.origin; lineNo < len(o) && o[lineNo] != 0 && o[lineNo] != lineNo+1 {
+						note += fmt.Sprintf(" (input enters at line %d)", o[lineNo])
+					}
 				}
 				out = append(out, finding.Finding{
 					Kind:     finding.KindCode,
@@ -87,6 +113,28 @@ func (s *Scanner) Scan(root string, opts scanner.Options) ([]finding.Finding, er
 }
 
 var idorExts = merge(js, py, ruby, php)
+
+// reCsAutoAntiforgery marks app-wide antiforgery validation: the global
+// AutoValidateAntiforgeryToken filter/attribute (as a Filters.Add(...) in
+// startup or an attribute on a base controller).
+var reCsAutoAntiforgery = regexp.MustCompile(`AutoValidateAntiforgeryToken`)
+
+// dotnetGlobalAntiforgery reports whether the app validates antiforgery tokens
+// globally, so that an [IgnoreAntiforgeryToken] on an action is a real opt-out
+// of active protection rather than a no-op.
+func dotnetGlobalAntiforgery(files []scanner.TextFile) bool {
+	for _, f := range files {
+		if filepath.Ext(f.Path) != ".cs" {
+			continue
+		}
+		for _, line := range f.Lines {
+			if reCsAutoAntiforgery.MatchString(line) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // isComment reports whether a line is (starts as) a comment, so a pattern that
 // appears in commented-out code or documentation doesn't fire. It handles only

@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const version = "2.1.0"
+const version = "2.2.0"
 
 // Execute is the entry point called by main.
 func Execute() int {
@@ -16,6 +16,10 @@ func Execute() int {
 		return 2
 	}
 	switch os.Args[1] {
+	case "audit":
+		return runAudit(os.Args[2:])
+	case "review":
+		return runReview(os.Args[2:])
 	case "scan":
 		return runScan(os.Args[2:])
 	case "hook":
@@ -51,6 +55,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `andas — sift real security risk from the noise
 
 usage:
+  andas audit [path]          ★ run every analysis → one graded security report
+  andas review [path]         security code review (verdict + per-file comments)
+  andas review . --since main review only a branch's changes (PR mode)
   andas scan [path]           scan a directory (default: current)
   andas scan . --history      also scan git history for removed secrets
   andas scan . --html r.html  write a shareable HTML report

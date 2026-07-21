@@ -1,0 +1,58 @@
+# andas — automated security code review on every pull request.
+#
+# Copy this file to .github/workflows/andas-pr-review.yml in your repo.
+# It reviews only the code the PR changes, posts the review as a PR comment,
+# uploads SARIF so findings appear inline on the diff, and fails the check when
+# a HIGH+ real-risk issue is found (blocking merge until it's addressed).
+#
+# andas stays read-only: it writes the report files; GitHub's own actions post
+# and annotate them.
+
+name: andas security review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write   # to post the review comment
+  security-events: write # to upload SARIF for inline annotations
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # andas --since needs the base branch history
+
+      - name: Install andas
+        run: go install github.com/malandas/andas@latest
+
+      - name: Review the PR's changes
+        id: review
+        run: |
+          andas review . \
+            --since "origin/${{ github.base_ref }}" \
+            --markdown andas-review.md \
+            --sarif andas.sarif \
+            --fail-on high
+        continue-on-error: true   # let the comment/SARIF steps run even on a fail
+
+      - name: Post the review as a PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: andas-review.md
+
+      - name: Upload SARIF for inline annotations
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: andas.sarif
+
+      - name: Enforce the verdict (block merge on high risk)
+        if: steps.review.outcome == 'failure'
+        run: |
+          echo "::error::andas requested changes — a HIGH+ security risk was found."
+          exit 1

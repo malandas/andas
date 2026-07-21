@@ -393,4 +393,43 @@ var rules = []rule{
 	{"cs-razor-raw", "Possible XSS via Html.Raw of model/request data", finding.SevMedium, "CWE-79", razor,
 		regexp.MustCompile(`(?:@?Html\.Raw|new\s+HtmlString)\s*\([^)]*\b(?:Model|ViewBag|ViewData|TempData|Request|Query)\b`),
 		"Let Razor auto-encode; only pass values through Html.Raw after sanitising with a vetted encoder."},
+
+	// ─── C# / .NET — deeper security coverage ────────────────────────────────
+	// CSRF protection actively opted out of (CWE-352). [IgnoreAntiforgeryToken]
+	// only *disables* something when the app validates antiforgery globally
+	// (AutoValidateAntiforgeryToken); without that it is a no-op, so this rule is
+	// gated on a detected global filter in sast.go — otherwise it would flag a
+	// harmless attribute as a risk (pure noise).
+	{"cs-csrf-disabled", "CSRF protection disabled ([IgnoreAntiforgeryToken])", finding.SevMedium, "CWE-352", cs,
+		regexp.MustCompile(`\[(?:[\w.]+\.)?IgnoreAntiforgeryToken\b`),
+		"This opts the endpoint out of the app's global antiforgery check — confirm it's CSRF-safe another way, or remove the attribute."},
+
+	// Mass assignment / over-posting (CWE-915): binding the request straight onto
+	// a persisted entity lets an attacker set fields the form never showed.
+	{"cs-mass-assignment", "Possible mass assignment (model bound onto an entity)", finding.SevMedium, "CWE-915", cs,
+		regexp.MustCompile(`\b(?:TryUpdateModelAsync|TryUpdateModel|UpdateModel)\s*\(`),
+		"Bind to a dedicated view model / DTO with only the editable fields, not the entity; or pass an explicit include-list."},
+
+	// Insecure cookie attributes (CWE-614/1004): a session cookie sent over HTTP
+	// or readable by JavaScript.
+	{"cs-cookie-insecure", "Insecure cookie flags (Secure/HttpOnly disabled)", finding.SevMedium, "CWE-614", cs,
+		regexp.MustCompile(`(?:Secure|HttpOnly)\s*=\s*false`),
+		"Set Secure = true and HttpOnly = true on authentication/session cookies."},
+
+	// JWT / OIDC validation switched off (CWE-347): tokens are trusted without
+	// verifying issuer, audience, expiry, signature, or requiring HTTPS metadata.
+	{"cs-jwt-validation-disabled", "JWT/OIDC token validation disabled", finding.SevHigh, "CWE-347", cs,
+		regexp.MustCompile(`(?:ValidateIssuer|ValidateAudience|ValidateLifetime|RequireExpirationTime|ValidateIssuerSigningKey|RequireSignedTokens)\s*=\s*false|RequireHttpsMetadata\s*=\s*false`),
+		"Keep issuer/audience/lifetime/signature validation enabled; a disabled check lets forged or expired tokens through."},
+
+	// TLS certificate validation bypassed (CWE-295): trusting any server cert.
+	{"cs-cert-validation-disabled", "TLS certificate validation disabled", finding.SevHigh, "CWE-295", cs,
+		regexp.MustCompile(`DangerousAcceptAnyServerCertificateValidator|(?:ServerCertificateCustomValidationCallback|RemoteCertificateValidationCallback)\s*(?:=|\+=)\s*(?:delegate|[^;=]*=>\s*true)`),
+		"Validate the server certificate chain; never return true unconditionally from the callback."},
+
+	// Permissive CORS (CWE-942): any origin allowed together with credentials, or
+	// an origin predicate that always returns true.
+	{"cs-cors-permissive", "Permissive CORS (any origin with credentials)", finding.SevMedium, "CWE-942", cs,
+		regexp.MustCompile(`SetIsOriginAllowed\s*\(\s*[^)]*=>\s*true\s*\)|AllowAnyOrigin\s*\(\s*\)\s*\.\s*AllowCredentials`),
+		"Reflecting any origin with credentials defeats CORS; allow an explicit list of trusted origins instead."},
 }

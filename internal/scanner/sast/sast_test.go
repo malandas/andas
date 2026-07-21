@@ -290,3 +290,77 @@ func ruleIDs(fs []finding.Finding) []string {
 	}
 	return out
 }
+
+func TestSAST_CSharpDepthRules(t *testing.T) {
+	src := "public class Sec : Controller {\n" +
+		"  [HttpPost(\"s\")][IgnoreAntiforgeryToken]\n" +
+		"  public IActionResult Save(User u) { TryUpdateModelAsync(u); return Ok(); }\n" +
+		"  public void Cfg() {\n" +
+		"    var opt = new CookieOptions { HttpOnly = false, Secure = false };\n" +
+		"    var p = new TokenValidationParameters { ValidateIssuer = false };\n" +
+		"    h.ServerCertificateCustomValidationCallback = (m,c,ch,e) => true;\n" +
+		"    b.SetIsOriginAllowed(_ => true).AllowCredentials();\n" +
+		"  }\n" +
+		"}\n"
+	fs := scanSrc(t, "Sec.cs", src)
+	// cs-csrf-disabled is context-gated (needs global antiforgery), tested below.
+	for _, id := range []string{
+		"cs-mass-assignment", "cs-cookie-insecure",
+		"cs-jwt-validation-disabled", "cs-cert-validation-disabled", "cs-cors-permissive",
+	} {
+		if hasRule(fs, id) == nil {
+			t.Errorf("expected C# depth rule %q to fire; got %v", id, ruleIDs(fs))
+		}
+	}
+}
+
+func TestSAST_CSharpCSRFContextGated(t *testing.T) {
+	controller := "public class C : Controller {\n" +
+		"  [Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryToken]\n" +
+		"  public IActionResult X() => Ok();\n}\n"
+
+	// No global antiforgery → [IgnoreAntiforgeryToken] is a no-op → NOT flagged.
+	if hasRule(scanSrc(t, "C.cs", controller), "cs-csrf-disabled") != nil {
+		t.Error("cs-csrf-disabled must stay silent without a global antiforgery filter (no-op attribute)")
+	}
+
+	// With a global AutoValidateAntiforgeryToken filter → it's a real opt-out.
+	program := "builder.Services.AddControllersWithViews(o =>\n" +
+		"  o.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));\n"
+	fs := scanFiles(t, map[string]string{"Program.cs": program, "C.cs": controller})
+	if hasRule(fs, "cs-csrf-disabled") == nil {
+		t.Errorf("cs-csrf-disabled should fire when global antiforgery is present; got %v", ruleIDs(fs))
+	}
+}
+
+func scanFiles(t *testing.T, files map[string]string) []finding.Finding {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f, err := New().Scan(dir, scanner.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func TestSAST_CSharpDepthNoFalsePositives(t *testing.T) {
+	// Secure defaults must NOT be flagged.
+	src := "public class Ok {\n" +
+		"  public void Cfg() {\n" +
+		"    var opt = new CookieOptions { HttpOnly = true, Secure = true };\n" +
+		"    var p = new TokenValidationParameters { ValidateIssuer = true, ValidateLifetime = true };\n" +
+		"    b.WithOrigins(\"https://trusted.example\").AllowCredentials();\n" +
+		"  }\n" +
+		"}\n"
+	fs := scanSrc(t, "Ok.cs", src)
+	for _, id := range []string{"cs-cookie-insecure", "cs-jwt-validation-disabled", "cs-cors-permissive"} {
+		if f := hasRule(fs, id); f != nil {
+			t.Errorf("secure config wrongly flagged by %q at line %d", id, f.Line)
+		}
+	}
+}

@@ -207,3 +207,82 @@ func TestSurface_DotnetMinimalApi(t *testing.T) {
 		t.Errorf("MapPost with .RequireAuthorization() should be authed: %+v", r)
 	}
 }
+
+func TestSurface_DotnetBaseControllerAuthInheritance(t *testing.T) {
+	base := "namespace App;\n[Authorize]\npublic abstract class BaseApiController : ControllerBase { }\n"
+	ctrl := "namespace App;\n[Route(\"orders\")]\n" +
+		"public class OrdersController(IRepo r) : BaseApiController\n{\n" +
+		"    [HttpGet(\"\")] public IActionResult List() => Ok();\n" +
+		"    [AllowAnonymous][HttpGet(\"public\")] public IActionResult Pub() => Ok();\n}\n"
+	rs := mapFiles(t, map[string]string{"BaseApiController.cs": base, "OrdersController.cs": ctrl})
+
+	// Inherited [Authorize] from the base class marks the action authed…
+	if r := find(rs, "GET", "/orders"); r == nil || !r.Auth {
+		t.Errorf("action should inherit [Authorize] from base controller: %+v", r)
+	}
+	// …but an explicit [AllowAnonymous] still wins.
+	if r := find(rs, "GET", "/orders/public"); r == nil || r.Auth {
+		t.Errorf("[AllowAnonymous] must override inherited auth: %+v", r)
+	}
+}
+
+func TestSurface_DotnetMultiLevelInheritance(t *testing.T) {
+	// SecuredController → BaseController([Authorize]) → ControllerBase.
+	files := map[string]string{
+		"BaseController.cs":    "namespace A;\n[Authorize]\npublic class BaseController : ControllerBase {}\n",
+		"SecuredController.cs": "namespace A;\npublic class SecuredController : BaseController {}\n",
+		"AdminController.cs":   "namespace A;\n[Route(\"admin\")]\npublic class AdminController : SecuredController {\n  [HttpGet(\"\")] public IActionResult I() => Ok();\n}\n",
+	}
+	rs := mapFiles(t, files)
+	if r := find(rs, "GET", "/admin"); r == nil || !r.Auth {
+		t.Errorf("auth should resolve two levels up the base chain: %+v", r)
+	}
+}
+
+func TestSurface_DotnetNoInheritanceWhenBaseUnknown(t *testing.T) {
+	// A controller whose base is a framework type stays no-auth (nothing inherited).
+	ctrl := "namespace A;\n[Route(\"x\")]\npublic class XController : Controller {\n  [HttpGet(\"\")] public IActionResult I() => Ok();\n}\n"
+	rs := mapFiles(t, map[string]string{"XController.cs": ctrl})
+	if r := find(rs, "GET", "/x"); r == nil || r.Auth {
+		t.Errorf("no base auth to inherit → should stay no-auth: %+v", r)
+	}
+}
+
+func TestSurface_DotnetGlobalAuth_Forms(t *testing.T) {
+	ctrl := "[Route(\"orders\")]\npublic class OrdersController : ControllerBase {\n  [HttpGet(\"\")] public IActionResult L() => Ok();\n}\n"
+	global := []struct {
+		name string
+		prog string
+	}{
+		{"mapcontrollers-inline", "var app=X(); app.MapControllers().RequireAuthorization();\n"},
+		{"mapcontrollers-multiline", "var app=X();\napp.MapControllers()\n   .RequireAuthorization();\n"},
+		{"fallback-policy", "services.AddAuthorization(o => o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());\n"},
+		{"authorize-filter", "o.Filters.Add(new AuthorizeFilter(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()));\n"},
+	}
+	for _, g := range global {
+		rs := mapFiles(t, map[string]string{"Program.cs": g.prog, "OrdersController.cs": ctrl})
+		if r := find(rs, "GET", "/orders"); r == nil || !r.Auth {
+			t.Errorf("%s: /orders should be authed under global auth; got %+v", g.name, r)
+		}
+	}
+
+	// Negative: a single MapGet().RequireAuthorization() must NOT be read as
+	// global — otherwise a real no-auth controller would be hidden.
+	prog := "var app=X();\napp.MapControllers();\napp.MapGet(\"/health\", h).RequireAuthorization();\n"
+	rs := mapFiles(t, map[string]string{"Program.cs": prog, "OrdersController.cs": ctrl})
+	if r := find(rs, "GET", "/orders"); r == nil || r.Auth {
+		t.Errorf("a lone MapGet auth must not imply global auth: %+v", r)
+	}
+}
+
+func TestSurface_DotnetGlobalAuth_SplitStartupFile(t *testing.T) {
+	// The policy may live in an extension file, not Program.cs.
+	ext := "public static class AuthSetup {\n" +
+		"  public static void Add(this IServiceCollection s) =>\n" +
+		"    s.AddAuthorization(o => o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());\n}\n"
+	ctrl := "[Route(\"x\")]\npublic class XController : ControllerBase { [HttpGet(\"\")] public IActionResult I() => Ok(); }\n"
+	rs := mapFiles(t, map[string]string{"AuthExtensions.cs": ext, "XController.cs": ctrl})
+	if r := find(rs, "GET", "/x"); r == nil || !r.Auth {
+		t.Errorf("global auth defined in a split startup file should still apply: %+v", r)
+	}
+}

@@ -24,6 +24,10 @@ type Route struct {
 	Auth        bool // an auth check is visible on the line or in the file
 	UserInput   bool // the handler/line references user-controlled input
 	RateLimited bool // a rate-limit/throttle guard is visible near the route
+	// Guard describes the authorization requirement when known: "" (none),
+	// "auth" (authenticated, no specific role), "role:Admin,Manager", or
+	// "policy:Name". Populated for ASP.NET Core; other frameworks leave it "".
+	Guard string
 }
 
 type matcher struct {
@@ -87,6 +91,10 @@ func Map(root string, ignore []string) ([]Route, error) {
 	// [AllowAnonymous]. Detect that first, so controllers without a visible
 	// [Authorize] aren't wrongly flagged no-auth.
 	dotnetGlobalAuth := detectDotnetGlobalAuth(files)
+	// Controllers often inherit [Authorize] from a shared base class in another
+	// file; build the class→(auth, base) map once so route auth can be resolved
+	// up the inheritance chain rather than mislabelled no-auth.
+	dotnetClasses := collectDotnetClasses(files)
 
 	var out []Route
 	for _, f := range files {
@@ -98,7 +106,7 @@ func Map(root string, ignore []string) ([]Route, error) {
 			out = append(out, graphqlOps(f)...)
 		}
 		if ext == ".cs" {
-			out = append(out, dotnetRoutes(f, dotnetGlobalAuth)...)
+			out = append(out, dotnetRoutes(f, dotnetGlobalAuth, dotnetClasses)...)
 		}
 		if (ext == ".yaml" || ext == ".yml" || ext == ".json") && looksOpenAPI(f.Lines) {
 			out = append(out, openapiPaths(f)...)
@@ -205,6 +213,7 @@ var (
 	reCsAuthorize  = regexp.MustCompile(`\[Authorize\b`)
 	reCsAnon       = regexp.MustCompile(`\[AllowAnonymous\b`)
 	reCsRouteConst = regexp.MustCompile(`\{(\w+)[:?][^}]*\}`) // {id:guid} / {id?} -> {id}
+	reCsMethodLike = regexp.MustCompile(`^\s*(?:\[[^\]]*\]\s*)*(?:public|private|protected|internal)\b[^;={]*\(`)
 )
 
 // auth tri-state for a controller/action.
@@ -219,15 +228,17 @@ const (
 // [Authorize]/[AllowAnonymous] (action-level overriding controller-level) to
 // judge auth. An action path starting with "/" is absolute and ignores the
 // prefix — matching ASP.NET's own routing.
-func dotnetRoutes(f scanner.TextFile, globalAuth bool) []Route {
+func dotnetRoutes(f scanner.TextFile, globalAuth bool, classes map[string]dotnetClass) []Route {
 	var out []Route
 	className := ""
 	classPrefix := ""
 	classAuth := authUnknown
+	classGuard := ""
 	seenClass := false
 
 	pendingRoute := ""   // a [Route(...)] seen but not yet attached
 	pendingAuth := authUnknown
+	pendingGuard := ""
 
 	for lineNo, line := range f.Lines {
 		if m := reCsRoute.FindStringSubmatch(line); m != nil {
@@ -235,9 +246,11 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool) []Route {
 		}
 		if reCsAuthorize.MatchString(line) {
 			pendingAuth = authRequired
+			pendingGuard = parseAuthorizeGuard(line)
 		}
 		if reCsAnon.MatchString(line) {
 			pendingAuth = authAnon
+			pendingGuard = ""
 		}
 
 		// An HTTP verb attribute marks an endpoint.
@@ -248,14 +261,26 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool) []Route {
 				action = pendingRoute // [HttpGet] paired with a separate [Route("...")]
 			}
 			path := dotnetPath(classPrefix, action, className)
-			// Resolve auth: action-level attribute wins, else controller-level,
-			// else the app-wide default (a global filter makes it required).
+			// Resolve auth in precedence order: action-level attribute, then
+			// controller-level, then inherited from a base controller's
+			// [Authorize]/[AllowAnonymous], then the app-wide default.
 			auth := classAuth
+			guard := classGuard
 			if pendingAuth != authUnknown {
 				auth = pendingAuth
+				guard = pendingGuard // action-level attribute overrides the controller's
+			}
+			if auth == authUnknown {
+				if auth = resolveInheritedAuth(className, classes); auth == authRequired {
+					guard = "auth" // inherited from a base controller; role unknown here
+				}
 			}
 			if auth == authUnknown && globalAuth {
 				auth = authRequired
+				guard = "auth"
+			}
+			if auth != authRequired {
+				guard = ""
 			}
 			out = append(out, Route{
 				Method:    method,
@@ -265,9 +290,11 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool) []Route {
 				Line:      lineNo + 1,
 				Auth:      auth == authRequired,
 				UserInput: method != "GET" || strings.Contains(path, "{"),
+				Guard:     guard,
 			})
 			pendingRoute = ""
 			pendingAuth = authUnknown
+			pendingGuard = ""
 			continue
 		}
 
@@ -276,13 +303,174 @@ func dotnetRoutes(f scanner.TextFile, globalAuth bool) []Route {
 			className = m[1]
 			classPrefix = pendingRoute
 			classAuth = pendingAuth
+			classGuard = ""
+			if pendingAuth == authRequired {
+				classGuard = pendingGuard
+			}
 			seenClass = true
 			pendingRoute = ""
 			pendingAuth = authUnknown
+			pendingGuard = ""
 		}
 	}
 	_ = seenClass
 	return out
+}
+
+// reCsAuthorizeArgs pulls the Roles="..." / Policy="..." out of an [Authorize(...)]
+// attribute so the specific guard, not just "authenticated", is recorded.
+var reCsAuthorizeArgs = regexp.MustCompile(`\[Authorize\s*\(([^)]*)\)`)
+var reCsRoles = regexp.MustCompile(`Roles\s*=\s*"([^"]*)"`)
+var reCsPolicy = regexp.MustCompile(`Policy\s*=\s*"([^"]*)"`)
+
+// parseAuthorizeGuard turns an [Authorize...] line into a compact guard string:
+// "role:Admin,Manager", "policy:Name", or "auth" for a bare [Authorize].
+func parseAuthorizeGuard(line string) string {
+	m := reCsAuthorizeArgs.FindStringSubmatch(line)
+	if m == nil {
+		return "auth" // [Authorize] with no arguments
+	}
+	args := m[1]
+	if r := reCsRoles.FindStringSubmatch(args); r != nil && r[1] != "" {
+		return "role:" + r[1]
+	}
+	if p := reCsPolicy.FindStringSubmatch(args); p != nil && p[1] != "" {
+		return "policy:" + p[1]
+	}
+	return "auth"
+}
+
+// dotnetClass records what a controller class declares for auth resolution: its
+// own class-level [Authorize]/[AllowAnonymous] verdict and the base class it
+// derives from (so an inherited [Authorize] can be followed up the chain).
+type dotnetClass struct {
+	auth int
+	base string
+}
+
+// collectDotnetClasses builds a class→(auth, base) map across all .cs files so
+// route auth can be resolved through inheritance, not just the attributes
+// visible in the controller's own file.
+func collectDotnetClasses(files []scanner.TextFile) map[string]dotnetClass {
+	out := map[string]dotnetClass{}
+	for _, f := range files {
+		if filepath.Ext(f.Path) != ".cs" {
+			continue
+		}
+		pendingAuth := authUnknown
+		for i, line := range f.Lines {
+			if reCsAuthorize.MatchString(line) {
+				pendingAuth = authRequired
+			}
+			if reCsAnon.MatchString(line) {
+				pendingAuth = authAnon
+			}
+			if m := reCsClass.FindStringSubmatch(line); m != nil {
+				out[m[1]] = dotnetClass{auth: pendingAuth, base: dotnetBaseClass(f.Lines, i)}
+				pendingAuth = authUnknown
+			} else if reCsMethodLike.MatchString(line) {
+				pendingAuth = authUnknown // method attributes must not leak to a later class
+			}
+		}
+	}
+	return out
+}
+
+// resolveInheritedAuth walks a controller's base-class chain, returning the
+// first explicit [Authorize]/[AllowAnonymous] verdict it finds. Depth-bounded so
+// a malformed or cyclic hierarchy can't loop.
+func resolveInheritedAuth(className string, classes map[string]dotnetClass) int {
+	c, ok := classes[className]
+	if !ok {
+		return authUnknown
+	}
+	base := c.base
+	for depth := 0; depth < 16 && base != ""; depth++ {
+		bc, ok := classes[base]
+		if !ok {
+			return authUnknown // base is a framework/3rd-party type we can't see
+		}
+		if bc.auth != authUnknown {
+			return bc.auth
+		}
+		base = bc.base
+	}
+	return authUnknown
+}
+
+// dotnetBaseClass extracts the base class from a class declaration that starts
+// at line idx: the first type after the top-level `:`, ignoring the primary
+// constructor's (...) and any <generics>. Framework bases (Controller/
+// ControllerBase/…) return "" since they carry no app auth.
+func dotnetBaseClass(lines []string, idx int) string {
+	var sb strings.Builder
+	for i := idx; i < len(lines) && i < idx+16; i++ {
+		if j := strings.IndexByte(lines[i], '{'); j >= 0 {
+			sb.WriteString(lines[i][:j])
+			break
+		}
+		sb.WriteString(lines[i])
+		sb.WriteByte(' ')
+	}
+	header := sb.String()
+	loc := reCsClass.FindStringSubmatchIndex(header)
+	if loc == nil {
+		return ""
+	}
+	rest := stripBalanced(stripBalanced(header[loc[1]:], '(', ')'), '<', '>')
+	ci := strings.IndexByte(rest, ':')
+	if ci < 0 {
+		return ""
+	}
+	base := firstIdent(rest[ci+1:])
+	switch base {
+	case "Controller", "ControllerBase", "Object", "object", "PageModel", "ComponentBase":
+		return ""
+	}
+	return base
+}
+
+// stripBalanced removes every top-level open..close balanced span (e.g. all
+// (...) or all <...>) from s, leaving nested content out entirely.
+func stripBalanced(s string, open, close byte) string {
+	var b strings.Builder
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case open:
+			depth++
+		case close:
+			if depth > 0 {
+				depth--
+				continue
+			}
+			b.WriteByte(s[i])
+		default:
+			if depth == 0 {
+				b.WriteByte(s[i])
+			}
+		}
+	}
+	return b.String()
+}
+
+// firstIdent returns the first C# identifier in s (skipping leading punctuation
+// and whitespace).
+func firstIdent(s string) string {
+	start := -1
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		isIdent := c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if isIdent && start < 0 {
+			start = i
+		} else if !isIdent && start >= 0 {
+			return s[start:i]
+		}
+	}
+	if start >= 0 {
+		return s[start:]
+	}
+	return ""
 }
 
 // dotnetPath composes the final route from a controller prefix and an action
@@ -318,35 +506,67 @@ func dotnetPath(prefix, action, controller string) string {
 	return p
 }
 
-// reCsGlobalAuth signals an app-wide authorization requirement: an MVC
-// AuthorizeFilter, a fallback/default policy, or MapControllers().RequireAuthorization().
-var reCsGlobalAuth = regexp.MustCompile(`AuthorizeFilter|FallbackPolicy|DefaultPolicy|\.RequireAuthorization\s*\(`)
-var reCsRequireAuthed = regexp.MustCompile(`RequireAuthenticatedUser|RequireAuthorization`)
+// Signals of an app-wide authorization requirement. Each is deliberately
+// specific so a single-endpoint `.RequireAuthorization()` can't masquerade as
+// global auth — which would wrongly mark every endpoint authenticated and hide a
+// real no-auth route (the worse error for a security tool).
+var (
+	reCsAuthorizeFilter  = regexp.MustCompile(`\bAuthorizeFilter\b`)                                  // MVC global filter
+	reCsFallbackPolicy   = regexp.MustCompile(`\b(?:FallbackPolicy|DefaultPolicy)\b`)                 // applies to endpoints with no other metadata
+	reCsRequireAuthed    = regexp.MustCompile(`\bRequireAuthenticatedUser\b`)                         // the policy actually demands a user
+	reCsMapAll           = regexp.MustCompile(`\bMap(?:Controllers|RazorPages|DefaultControllerRoute|ControllerRoute|AreaControllerRoute)\b`)
+	reCsMapAllAuthInline = regexp.MustCompile(`\bMap(?:Controllers|RazorPages|DefaultControllerRoute|ControllerRoute|AreaControllerRoute)\s*\([^)]*\)\s*\.\s*RequireAuthorization`)
+	reCsRequireAuthLine  = regexp.MustCompile(`^\s*\.\s*RequireAuthorization\s*\(`)
+)
 
 // detectDotnetGlobalAuth reports whether the app enforces authentication
 // globally, so an endpoint with no visible [Authorize] should still be treated
-// as authenticated (only [AllowAnonymous] opts out).
+// as authenticated (only [AllowAnonymous] opts out). It recognises the three
+// canonical forms — an MVC AuthorizeFilter, a Fallback/Default policy requiring
+// an authenticated user, and RequireAuthorization() chained onto the whole
+// controller/page endpoint set — including the split-startup case where these
+// live in an extension file rather than Program.cs.
 func detectDotnetGlobalAuth(files []scanner.TextFile) bool {
 	for _, f := range files {
 		if filepath.Ext(f.Path) != ".cs" {
 			continue
 		}
-		base := filepath.Base(f.Path)
-		if base != "Program.cs" && base != "Startup.cs" {
-			continue // the global policy is configured in app startup
-		}
-		var hasFilter, requiresAuthed bool
-		for _, line := range f.Lines {
-			if reCsGlobalAuth.MatchString(line) {
-				hasFilter = true
+		var authorizeFilter, fallback, requiresAuthed bool
+		for i, line := range f.Lines {
+			switch {
+			case reCsAuthorizeFilter.MatchString(line):
+				authorizeFilter = true
+			case reCsFallbackPolicy.MatchString(line):
+				fallback = true
 			}
 			if reCsRequireAuthed.MatchString(line) {
 				requiresAuthed = true
 			}
+			// MapControllers().RequireAuthorization() — inline or chained onto the
+			// preceding MapControllers()/MapRazorPages() statement.
+			if reCsMapAllAuthInline.MatchString(line) {
+				return true
+			}
+			if reCsRequireAuthLine.MatchString(line) && prevStmtMapsAll(f.Lines, i) {
+				return true
+			}
 		}
-		if hasFilter && requiresAuthed {
+		if requiresAuthed && (authorizeFilter || fallback) {
 			return true
 		}
+	}
+	return false
+}
+
+// prevStmtMapsAll reports whether the nearest non-blank line above i maps the
+// whole controller/page set — so a `.RequireAuthorization()` on its own line is
+// attributed to MapControllers(), not to a single MapGet above it.
+func prevStmtMapsAll(lines []string, i int) bool {
+	for j := i - 1; j >= 0 && j >= i-3; j-- {
+		if strings.TrimSpace(lines[j]) == "" {
+			continue
+		}
+		return reCsMapAll.MatchString(lines[j])
 	}
 	return false
 }
