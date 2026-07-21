@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.19.0
+- Filled the JavaScript SQL-injection gap and added Node-specific SAST rules:
+  query-by-concatenation SQLi (CWE-89), vm.runIn* sandbox escape, spawn/execFile
+  with shell:true, setTimeout/setInterval with a string, dynamic require()/
+  import() of a variable path, and JWT signed with a hardcoded secret. These
+  now feed the pentest endpoint->vuln linking too.
+
 ## v1.18.0
 - New `andas pentest` command for authorised assessment: fuses the attack
   surface, the SAST sinks each endpoint's handler reaches (endpoint -> vuln

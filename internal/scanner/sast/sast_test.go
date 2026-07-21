@@ -162,3 +162,19 @@ func TestSAST_SkipsMinifiedLines(t *testing.T) {
 		t.Errorf("minified/very-long line should be skipped, got %v", f)
 	}
 }
+
+func TestSAST_JSRules(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.js", "db.query(\"SELECT * FROM u WHERE id=\" + req.query.id)", "js-sql-concat"},
+		{"a.js", "vm.runInNewContext(code)", "js-vm-run"},
+		{"a.js", "spawn(cmd, args, { shell: true })", "js-child-spawn-shell"},
+		{"a.js", "setTimeout(\"go()\", 10)", "js-settimeout-string"},
+		{"a.js", "require(\"./\" + req.query.m)", "js-require-dynamic"},
+		{"a.js", "jwt.sign(p, \"hardcoded_key_x\")", "js-jwt-hardcoded-secret"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
+	}
+}

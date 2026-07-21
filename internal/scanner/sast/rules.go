@@ -116,6 +116,9 @@ var rules = []rule{
 	{"php-sql-var", "Possible SQL injection (variable in query)", finding.SevMedium, "CWE-89", php,
 		regexp.MustCompile(`(?:mysqli_query|->query|->exec)\s*\(\s*["'][^"']*\$`),
 		"Use prepared statements with bound parameters instead of interpolating variables."},
+	{"js-sql-concat", "Possible SQL injection (query built by concatenation/template)", finding.SevMedium, "CWE-89", js,
+		regexp.MustCompile("(?:\\.query|\\.execute|\\.raw|sequelize\\.query)\\s*\\(\\s*(?:['\"][^'\"]*['\"]\\s*\\+|`[^`]*\\$\\{)"),
+		"Use parameterised queries / bound placeholders ($1, ?); never build SQL by string concatenation."},
 
 	// --- Path traversal (CWE-22) — reading a file from a variable path ---
 	{"py-path-traversal", "Possible path traversal (file opened from a variable)", finding.SevMedium, "CWE-22", py,
@@ -233,6 +236,23 @@ var rules = []rule{
 		merge(js, py),
 		regexp.MustCompile(`new RegExp\s*\(\s*(?:req\.|request\.|[A-Za-z_]\w*\s*[,)])|re\.compile\s*\([^)]*(?:request\.|req\.|\+\s*[A-Za-z_])`),
 		"Never build a regex from user input; use a fixed pattern or a safe matcher with a timeout."},
+
+	// --- Node/JS-specific dangerous sinks ---
+	{"js-vm-run", "Sandbox escape risk via vm.runIn*/vm.Script", finding.SevHigh, "CWE-95", js,
+		regexp.MustCompile(`vm\.(?:runInThisContext|runInNewContext|runInContext|compileFunction)\s*\(|new\s+vm\.Script\s*\(`),
+		"Node's vm is not a security sandbox; never run untrusted code through it."},
+	{"js-child-spawn-shell", "Command execution with shell enabled", finding.SevHigh, "CWE-78", js,
+		regexp.MustCompile(`(?:spawn|execFile)\s*\([^)]*shell\s*:\s*true`),
+		"Drop shell:true and pass arguments as an array so input can't break out."},
+	{"js-settimeout-string", "Code injection via setTimeout/setInterval with a string", finding.SevHigh, "CWE-95", js,
+		regexp.MustCompile(`set(?:Timeout|Interval)\s*\(\s*['"` + "`" + `]`),
+		"Pass a function to setTimeout/setInterval, not a string (it's eval in disguise)."},
+	{"js-require-dynamic", "Dynamic require()/import() of a variable path", finding.SevMedium, "CWE-95", js,
+		regexp.MustCompile(`\brequire\s*\([^)]*(?:req\.|request\.|\+\s*[A-Za-z_])|import\s*\([^)]*(?:req\.|` + "`" + `[^` + "`" + `]*\$\{)`),
+		"Load modules from a fixed allowlist; a dynamic path lets an attacker load arbitrary code."},
+	{"js-jwt-hardcoded-secret", "JWT signed with a hardcoded secret", finding.SevHigh, "CWE-321", js,
+		regexp.MustCompile(`jwt\.sign\s*\([^)]*,\s*['"][^'"]{4,}['"]`),
+		"Load the signing secret from a secrets manager or env var, not a string literal."},
 
 	// --- Weak TLS/SSL protocol version (CWE-326) ---
 	// Legacy protocol names use char classes (SSL[v]3, TLS[v]1) so andas doesn't

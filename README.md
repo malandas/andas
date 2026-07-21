@@ -276,7 +276,8 @@ traversal, SSRF, weak crypto (MD5/SHA1, insecure randomness), XXE, template
 injection (SSTI), open redirect, NoSQL injection, disabled TLS, XSS, and SQL
 injection, plus broken JWT verification, insecure cookies, hardcoded crypto keys,
 disabled CSRF, world-writable files, weak TLS, LDAP/XPath injection, prototype
-pollution, mass assignment, and regex-from-input (ReDoS) — 27 CWE classes
+pollution, mass assignment, regex-from-input (ReDoS), and Node-specific sinks
+(vm escape, dynamic require, shell spawn) — 27 CWE classes
 across JS/TS, Python, Ruby, PHP, and Go, each
 tagged with its CWE. The rules are tight and high-signal, and every finding
 notes whether **user-controlled input reaches it** — either directly on the line
