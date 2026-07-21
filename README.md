@@ -239,7 +239,9 @@ Beyond secrets and dependencies, `andas` scans your own source for dangerous
 patterns — code injection (`eval`), OS command execution, unsafe deserialization, path
 traversal, SSRF, weak crypto (MD5/SHA1, insecure randomness), XXE, template
 injection (SSTI), open redirect, NoSQL injection, disabled TLS, XSS, and SQL
-injection — 15 CWE classes across JS/TS, Python, Ruby, PHP, and Go, each
+injection, plus broken JWT verification, insecure cookies, hardcoded crypto keys,
+disabled CSRF, world-writable files, and weak TLS versions — 22 CWE classes
+across JS/TS, Python, Ruby, PHP, and Go, each
 tagged with its CWE. The rules are tight and high-signal, and every finding
 notes whether **user-controlled input reaches it** — either directly on the line
 (`req.query`, `$_GET`, `request.args`, …) or through a variable assigned from

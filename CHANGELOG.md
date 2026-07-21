@@ -3,6 +3,13 @@
 All notable changes to andas. Versions are git tags; binaries are on the
 [releases page](https://github.com/malandas/andas/releases).
 
+## v1.14.0
+- SAST expanded from 15 to 22 CWE classes: added broken JWT verification
+  (CWE-347), insecure cookie flags (CWE-614), hardcoded cryptographic keys
+  (CWE-321), disabled CSRF protection (CWE-352), world-writable file modes
+  (CWE-732), and weak SSL/TLS protocol versions (CWE-326), across the five
+  languages.
+
 ## v1.13.0
 - SAST coverage expanded from 6 to 15 CWE classes: added path traversal
   (CWE-22), SSRF (CWE-918), weak crypto — MD5/SHA1 (CWE-328) and insecure

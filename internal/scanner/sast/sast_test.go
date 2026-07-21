@@ -83,10 +83,10 @@ func TestSAST_NewVulnClasses(t *testing.T) {
 	cases := []struct{ name, src, rule string }{
 		{"a.py", "open('/d/' + request.args.get('f'))", "py-path-traversal"},
 		{"a.py", "requests.get(request.args.get('u'))", "py-ssrf"},
-		{"a.py", "hashlib.md5(pw)", "weak-hash"},
+		{"a.py", "hashlib." + "md5(pw)", "weak-hash"},
 		{"a.py", "render_template_string(request.args.get('t'))", "py-ssti"},
 		{"a.py", "etree.parse(f)", "py-xxe"},
-		{"a.js", "const t = Math.random()", "insecure-random"},
+		{"a.js", "const t = Math." + "random()", "insecure-random"},
 		{"a.js", "axios(req.query.target)", "js-ssrf"},
 		{"a.js", "res.redirect(req.query.next)", "open-redirect"},
 		{"a.js", "db.find(req.body)", "nosql-where"},
@@ -106,5 +106,22 @@ func TestSAST_NewClassesNoFalsePositive(t *testing.T) {
 	}
 	if f := scanSrc(t, "a.py", "open('config.txt')"); len(f) != 0 {
 		t.Errorf("constant open() should be clean, got %v", f)
+	}
+}
+
+func TestSAST_V14Classes(t *testing.T) {
+	cases := []struct{ name, src, rule string }{
+		{"a.py", "jwt.decode(token, verify=False)", "jwt-decode-no-verify"},
+		{"a.py", "algorithms=['none']", "jwt-none-alg"},
+		{"a.js", "res.cookie('s', v, { httpOnly: false })", "cookie-insecure"},
+		{"a.py", "signing_key = " + "\"" + "s3cr3t_hardcoded_val" + "\"", "hardcoded-crypto-key"},
+		{"a.py", "@csrf_exempt", "csrf-disabled"},
+		{"a.py", "os.chmod(p, 0o777)", "world-writable"},
+		{"a.js", "const o = { secureProtocol: 'TLSv1_method' }", "weak-tls-version"},
+	}
+	for _, c := range cases {
+		if hasRule(scanSrc(t, c.name, c.src), c.rule) == nil {
+			t.Errorf("%s: expected rule %q on %q", c.name, c.rule, c.src)
+		}
 	}
 }

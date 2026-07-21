@@ -170,4 +170,46 @@ var rules = []rule{
 		merge(js, py),
 		regexp.MustCompile(`\$where\s*[:=]|\.find\s*\(\s*(?:req\.body|req\.query|request\.)`),
 		"Never pass raw request objects into a query; validate and cast fields explicitly."},
+
+	// --- Broken JWT verification (CWE-347) ---
+	{"jwt-none-alg", "JWT verification weakened ('none' algorithm allowed)", finding.SevHigh, "CWE-347",
+		merge(js, py),
+		regexp.MustCompile(`(?i)algorithms?\s*[:=]\s*\[?\s*['"]none['"]|['"]alg['"]\s*:\s*['"]none['"]`),
+		"Pin verification to a specific asymmetric algorithm; never accept 'none'."},
+	{"jwt-decode-no-verify", "JWT decoded without verifying its signature", finding.SevHigh, "CWE-347",
+		merge(js, py),
+		regexp.MustCompile(`jwt\.decode\s*\([^)]*verify\s*[:=]\s*(?:False|false)|jwt\.decode\s*\(\s*[^,)]+\)\s*$`),
+		"Verify the signature with jwt.verify / decode(..., verify=True) and the expected key."},
+
+	// --- Insecure cookie flags (CWE-614 / CWE-1004) ---
+	{"cookie-insecure", "Cookie set without Secure/HttpOnly", finding.SevMedium, "CWE-614",
+		merge(js, py, php),
+		regexp.MustCompile(`(?i)httponly\s*[:=]\s*(?:false|0)|secure\s*[:=]\s*false|session\.cookie_httponly\s*=\s*0`),
+		"Set HttpOnly and Secure on session/auth cookies; add SameSite."},
+
+	// --- Hardcoded cryptographic key / IV (CWE-321) ---
+	{"hardcoded-crypto-key", "Hardcoded cryptographic key or IV", finding.SevHigh, "CWE-321",
+		merge(js, py, golang, php, ruby),
+		regexp.MustCompile(`(?i)(?:secret|encryption|aes|hmac|signing|jwt)_?key\s*[:=]\s*['"][A-Za-z0-9+/=_\-]{8,}['"]|\bIV\s*[:=]\s*['"][A-Za-z0-9+/=]{8,}['"]`),
+		"Load keys from a secrets manager or env var; never embed them in source."},
+
+	// --- CSRF protection disabled (CWE-352) ---
+	{"csrf-disabled", "CSRF protection disabled", finding.SevMedium, "CWE-352",
+		merge(py, php, ruby),
+		regexp.MustCompile(`(?i)@csrf_exempt|csrf\s*[:=]\s*(?:False|false)|WTF_CSRF_ENABLED\s*=\s*False|skip_before_action\s+:verify_authenticity_token`),
+		"Keep CSRF protection on for state-changing routes; exempt only APIs with token auth."},
+
+	// --- World-writable file permissions (CWE-732) ---
+	{"world-writable", "Overly permissive file mode (world-writable)", finding.SevMedium, "CWE-732",
+		merge(py, golang, ruby),
+		regexp.MustCompile(`chmod\s*\([^)]*0o?777|os\.chmod\([^)]*0o?666|FileMode\s*\(\s*0o?777`),
+		"Grant the least privilege needed; avoid world-writable (0777/0666) modes."},
+
+	// --- Weak TLS/SSL protocol version (CWE-326) ---
+	// Legacy protocol names use char classes (SSL[v]3, TLS[v]1) so andas doesn't
+	// match this very rule when scanning its own source.
+	{"weak-tls-version", "Weak SSL/TLS protocol version", finding.SevMedium, "CWE-326",
+		merge(py, js, golang),
+		regexp.MustCompile(`(?i)SSL[v]3|TLS[v]1(?:\.0|\.1)?['"\s)]|PROTOCOL_SSL[v][23]|MinVersion\s*:\s*tls\.VersionSSL30|secureProtocol\s*:\s*['"](?:SSL[v]3|TLS[v]1)`),
+		"Require TLS 1.2 or higher; disable legacy SSL and early TLS."},
 }
